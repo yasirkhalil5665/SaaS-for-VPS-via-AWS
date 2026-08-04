@@ -1,0 +1,73 @@
+services:
+  odoo:
+    image: odoo:19.0
+    container_name: odoo-{{ customer_slug }}
+    user: root
+    tty: true
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - HOST=db
+      - USER=odoo
+      - PASSWORD=odoo
+    restart: always
+    ports:
+      - "{{ host_port }}:8069"
+    deploy:
+      resources:
+        limits:
+          cpus: "{{ cpu }}"
+          memory: {{ memory }}
+        reservations:
+          cpus: "{{ cpu_reserve }}"
+          memory: {{ memory_reserve }}
+    networks:
+      net-{{ customer_slug }}:
+        aliases:
+          - odoo
+    volumes:
+      - data:/var/lib/odoo
+      - config:/etc/odoo
+      - ./addons:/mnt/extra-addons
+      - log:/var/log/odoo
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    image: postgres:16
+    container_name: postgres-{{ customer_slug }}
+    environment:
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=odoo
+      - POSTGRES_DB=postgres
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "{{ db_cpu }}"
+          memory: {{ db_memory }}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+    networks:
+      - net-{{ customer_slug }}
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
+  config:
+  log:
+
+networks:
+  net-{{ customer_slug }}:
+    driver: bridge
