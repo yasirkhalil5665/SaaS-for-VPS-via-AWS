@@ -1,0 +1,192 @@
+<style>
+  .pricing-wrap {
+    font-family: 'Segoe UI', Roboto, -apple-system, sans-serif;
+    max-width: 1100px;
+    margin: 60px auto;
+    padding: 0 20px;
+    text-align: center;
+  }
+  .pricing-wrap h2 {
+    font-size: 36px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 8px;
+  }
+  .pricing-wrap p.subtitle {
+    color: #6b7280;
+    font-size: 16px;
+    margin-bottom: 48px;
+  }
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .pricing-grid { grid-template-columns: 1fr; }
+  }
+  .pricing-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 32px 28px;
+    text-align: left;
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .pricing-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 12px 32px rgba(113, 75, 103, 0.15);
+  }
+  .pricing-card.featured {
+    border: 2px solid #714B67;
+    box-shadow: 0 8px 24px rgba(113, 75, 103, 0.12);
+  }
+  .badge {
+    position: absolute;
+    top: -14px;
+    right: 24px;
+    background: #714B67;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.5px;
+  }
+  .pricing-card h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin: 0 0 4px;
+  }
+  .pricing-card .tagline {
+    font-size: 14px;
+    color: #6b7280;
+    margin-bottom: 20px;
+  }
+  .pricing-card .price {
+    font-size: 40px;
+    font-weight: 800;
+    color: #1a1a2e;
+    margin-bottom: 4px;
+  }
+  .pricing-card .price span {
+    font-size: 16px;
+    font-weight: 500;
+    color: #9ca3af;
+  }
+  .pricing-card .price-note {
+    font-size: 13px;
+    color: #9ca3af;
+    margin-bottom: 24px;
+  }
+  .pricing-card ul {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 28px;
+  }
+  .pricing-card ul li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: #374151;
+    padding: 7px 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .pricing-card ul li:last-child { border-bottom: none; }
+  .pricing-card ul li::before {
+    content: "✓";
+    color: #714B67;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .pricing-card .cta {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 12px 0;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    box-sizing: border-box;
+    transition: opacity 0.15s ease;
+  }
+  .pricing-card .cta:hover { opacity: 0.88; }
+  .cta-outline {
+    background: #fff;
+    color: #714B67;
+    border: 2px solid #714B67;
+  }
+  .cta-filled {
+    background: #714B67;
+    color: #fff;
+    border: 2px solid #714B67;
+  }
+</style>
+
+<div class="pricing-wrap">
+  <h2>Choose Your Plan</h2>
+  <p class="subtitle">Isolated Odoo hosting, scaled to your business size</p>
+
+  <div class="pricing-grid">
+
+    <div class="pricing-card">
+      <h3>Starter</h3>
+      <p class="tagline">Perfect for small businesses getting started</p>
+      <div class="price">$29<span>/mo</span></div>
+      <div class="price-note">Billed monthly</div>
+      <ul>
+        <li>1 Core CPU</li>
+        <li>2 GB RAM</li>
+        <li>20 GB SSD Storage</li>
+        <li>Up to 5 Users</li>
+        <li>1 Company</li>
+        <li>CRM &amp; Sales Modules</li>
+        <li>Daily Backups</li>
+        <li>Standard Support</li>
+      </ul>
+      <a href="/signup?package=starter" class="cta cta-outline">Get Started</a>
+    </div>
+
+    <div class="pricing-card featured">
+      <span class="badge">MOST POPULAR</span>
+      <h3>Business</h3>
+      <p class="tagline">Built for growing teams</p>
+      <div class="price">$79<span>/mo</span></div>
+      <div class="price-note">Billed monthly</div>
+      <ul>
+        <li>2 Core CPU</li>
+        <li>4 GB RAM</li>
+        <li>40 GB SSD Storage</li>
+        <li>Up to 15 Users</li>
+        <li>Up to 3 Companies</li>
+        <li>CRM, Sales, Inventory, Accounting</li>
+        <li>Daily Backups + Weekly Snapshots</li>
+        <li>Priority Support</li>
+      </ul>
+      <a href="/signup?package=business" class="cta cta-filled">Choose Business</a>
+    </div>
+
+    <div class="pricing-card">
+      <h3>Enterprise</h3>
+      <p class="tagline">Full power for scaling operations</p>
+      <div class="price">$199<span>/mo</span></div>
+      <div class="price-note">Billed monthly</div>
+      <ul>
+        <li>4 Core CPU</li>
+        <li>8 GB RAM</li>
+        <li>100 GB SSD Storage</li>
+        <li>Unlimited Users</li>
+        <li>Unlimited Companies</li>
+        <li>All Modules Included</li>
+        <li>Hourly Backups</li>
+        <li>24/7 Dedicated Support</li>
+      </ul>
+      <a href="/signup?package=enterprise" class="cta cta-outline">Contact Sales</a>
+    </div>
+
+  </div>
+</div>
