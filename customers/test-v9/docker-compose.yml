@@ -1,7 +1,7 @@
 services:
   odoo:
     image: odoo:19.0
-    container_name: odoo-swaad
+    container_name: odoo-test-v9
     user: root
     tty: true
     depends_on:
@@ -12,6 +12,8 @@ services:
       - USER=odoo
       - PASSWORD=odoo
     restart: always
+    ports:
+      - "8102:8069"
     deploy:
       resources:
         limits:
@@ -21,9 +23,12 @@ services:
           cpus: "1"
           memory: 2g
     networks:
-      net-swaad:
+      net-test-v9:
         aliases:
           - odoo
+      proxy-net:
+        aliases:
+          - test-v9
     volumes:
       - data:/var/lib/odoo
       - config:/etc/odoo
@@ -36,7 +41,7 @@ services:
 
   db:
     image: postgres:16
-    container_name: postgres-swaad
+    container_name: postgres-test-v9
     environment:
       - POSTGRES_USER=odoo
       - POSTGRES_PASSWORD=odoo
@@ -55,7 +60,7 @@ services:
     volumes:
       - ./postgresql:/var/lib/postgresql/data
     networks:
-      - net-swaad
+      - net-test-v9
     logging:
       options:
         max-size: "10m"
@@ -67,5 +72,7 @@ volumes:
   log:
 
 networks:
-  net-swaad:
+  net-test-v9:
     driver: bridge
+  proxy-net:
+    external: true
