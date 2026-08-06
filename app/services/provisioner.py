@@ -5,6 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 from app.models.packages import PACKAGES
 from app.services.odoo_config import wait_for_odoo, create_database, install_modules, configure_company
 from app.services.nginx_manager import generate_nginx_config
+from app.services.email_service import send_welcome_email
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -91,6 +92,19 @@ def provision_customer(
     # 8. Configure Nginx reverse proxy for subdomain routing
     nginx_result = generate_nginx_config(customer_slug)
 
+    # 9. Send welcome email with instance URL and login credentials
+    email_result = None
+    customer_email = (company_info or {}).get("email")
+    if customer_email:
+        email_result = send_welcome_email(
+            to_email=customer_email,
+            customer_slug=customer_slug,
+            domain=nginx_result["domain"],
+            admin_login=admin_login,
+            admin_password=admin_password,
+            package=package,
+        )
+
     return {
         "customer_slug": customer_slug,
         "package": package,
@@ -100,5 +114,6 @@ def provision_customer(
         "modules": install_result,
         "company": company_result,
         "nginx": nginx_result,
+        "email": email_result,
         "compose_file": str(compose_path),
     }
