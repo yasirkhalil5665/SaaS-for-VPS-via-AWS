@@ -1,7 +1,7 @@
 services:
   odoo:
     image: odoo:19.0
-    container_name: odoo-test-v11
+    container_name: odoo-test-v12
     user: root
     tty: true
     depends_on:
@@ -23,12 +23,12 @@ services:
           cpus: "1"
           memory: 2g
     networks:
-      net-test-v11:
+      net-test-v12:
         aliases:
           - odoo
       proxy-net:
         aliases:
-          - test-v11
+          - test-v12
     volumes:
       - data:/var/lib/odoo
       - config:/etc/odoo
@@ -41,7 +41,7 @@ services:
 
   db:
     image: postgres:16
-    container_name: postgres-test-v11
+    container_name: postgres-test-v12
     environment:
       - POSTGRES_USER=odoo
       - POSTGRES_PASSWORD=odoo
@@ -60,7 +60,7 @@ services:
     volumes:
       - ./postgresql:/var/lib/postgresql/data
     networks:
-      - net-test-v11
+      - net-test-v12
     logging:
       options:
         max-size: "10m"
@@ -72,7 +72,7 @@ volumes:
   log:
 
 networks:
-  net-test-v11:
+  net-test-v12:
     driver: bridge
   proxy-net:
     external: true

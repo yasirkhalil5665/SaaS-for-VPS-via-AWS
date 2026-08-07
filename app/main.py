@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers.provision import router as provision_router
 from app.routers.checkout import router as checkout_router
 from app.routers.webhook import router as webhook_router
+from app.routers.instances import router as instances_router
 
 app = FastAPI(title="Odoo Provisioning Engine")
 
@@ -17,6 +18,7 @@ app.add_middleware(
 app.include_router(provision_router)
 app.include_router(checkout_router)
 app.include_router(webhook_router)
+app.include_router(instances_router)
 
 
 @app.get("/")
