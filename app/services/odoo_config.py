@@ -5,14 +5,14 @@ import xmlrpc.client
 def wait_for_odoo(host: str, port: int, timeout: int = 120) -> bool:
     """Poll Odoo's common endpoint until it responds or timeout hits."""
     url = f"http://{host}:{port}/xmlrpc/2/common"
-    common = xmlrpc.client.ServerProxy(url)
+    common = xmlrpc.client.ServerProxy(url, allow_none=True)
     start = time.time()
     while time.time() - start < timeout:
         try:
             common.version()
             return True
         except Exception:
-            time.sleep(2)
+            time.sleep(0.75)
     return False
 
 
@@ -58,9 +58,10 @@ def configure_company(
     common = xmlrpc.client.ServerProxy(common_url, allow_none=True)
     uid = common.authenticate(db_name, admin_login, admin_password, {})
 
-    models = xmlrpc.client.ServerProxy(object_url, allow_none=True)
+    if not uid:
+        return {"company_id": None, "updated_fields": [], "error": "Authentication failed"}
 
-    # Odoo always creates company id=1 (Main Company) by default
+    models = xmlrpc.client.ServerProxy(object_url, allow_none=True)
     company_id = 1
 
     update_vals = {}
@@ -127,12 +128,13 @@ def install_modules(
     common_url = f"http://{host}:{port}/xmlrpc/2/common"
     object_url = f"http://{host}:{port}/xmlrpc/2/object"
 
-    common = xmlrpc.client.ServerProxy(common_url)
+    common = xmlrpc.client.ServerProxy(common_url, allow_none=True)
     uid = common.authenticate(db_name, admin_login, admin_password, {})
 
-    models = xmlrpc.client.ServerProxy(object_url)
+    if not uid:
+        return {"installed": [], "error": "Authentication failed"}
 
-    module_ids = models.execute_kw(
+    models = xmlrpc.client.ServerProxy(object_url, allow_none=True)
         db_name, uid, admin_password,
         "ir.module.module", "search",
         [[["name", "in", modules]]],

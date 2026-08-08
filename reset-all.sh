@@ -17,7 +17,7 @@ for dir in customers/*/; do
 done
 
 echo "Removing customer directories..."
-rm -rf customers/*
+sudo rm -rf customers/*
 
 echo "Clearing nginx configs..."
 rm -f nginx/conf.d/*.conf
