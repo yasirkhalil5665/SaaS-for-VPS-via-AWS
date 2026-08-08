@@ -1,0 +1,188 @@
+<style>
+  .db-wrap {
+    font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif;
+    max-width: 640px;
+    margin: 60px auto;
+    padding: 0 20px;
+  }
+  .db-head {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+  .db-head .eyebrow {
+    display: inline-block;
+    background: #f3e8f1;
+    color: #714B67;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
+  .db-head h2 {
+    font-size: 30px;
+    font-weight: 800;
+    color: #0f0f1a;
+    margin: 0 0 8px;
+    letter-spacing: -0.5px;
+  }
+  .db-card {
+    background: linear-gradient(160deg, #2b1930 0%, #714B67 100%);
+    border-radius: 20px;
+    padding: 32px;
+    color: #fff;
+    box-shadow: 0 20px 50px rgba(43, 25, 48, 0.25);
+  }
+  .db-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    font-size: 14px;
+  }
+  .db-row:last-of-type { border-bottom: none; }
+  .db-row .label { opacity: 0.7; }
+  .db-row .value { font-weight: 700; }
+  .db-status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .db-status-badge.running { background: #1f8b4c; }
+  .db-status-badge.exited { background: #8b1f1f; }
+  .db-status-badge.unknown { background: #666; }
+  .db-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .db-actions button {
+    flex: 1;
+    padding: 12px 0;
+    border-radius: 10px;
+    border: none;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+  .db-actions button:hover { transform: translateY(-2px); }
+  .db-actions button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-start { background: #1f8b4c; color: #fff; }
+  .btn-stop { background: #8b1f1f; color: #fff; }
+  .btn-restart { background: #fff; color: #2b1930; }
+  .db-logout {
+    display: block;
+    text-align: center;
+    margin-top: 18px;
+    font-size: 13px;
+    color: #6b7280;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .db-error {
+    text-align: center;
+    color: #8b1f1f;
+    font-size: 14px;
+    margin-top: 10px;
+  }
+</style>
+
+<div class="db-wrap">
+  <div class="db-head">
+    <span class="eyebrow">Instance Dashboard</span>
+    <h2>Manage Your Instance</h2>
+  </div>
+
+  <div id="db-content">
+    <div class="db-error">Loading...</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var API_BASE = "http://localhost:8000"; // change to your real API domain in production
+  var LOGIN_PATH = "/dashboard-login"; // change if your login page has a different URL
+
+  var slug = sessionStorage.getItem("instance_slug");
+  var password = sessionStorage.getItem("instance_password");
+
+  var content = document.getElementById("db-content");
+
+  if (!slug || !password) {
+    window.location.href = LOGIN_PATH;
+    return;
+  }
+
+  function logout() {
+    sessionStorage.removeItem("instance_slug");
+    sessionStorage.removeItem("instance_password");
+    window.location.href = LOGIN_PATH;
+  }
+
+  function loadStatus() {
+    fetch(API_BASE + "/instances/" + slug, {
+      headers: { "X-Instance-Password": password }
+    })
+      .then(function(res) {
+        if (res.status === 401) throw new Error("Session expired. Please log in again.");
+        if (!res.ok) throw new Error("Instance not found.");
+        return res.json();
+      })
+      .then(function(data) { render(data); })
+      .catch(function(err) {
+        content.innerHTML = '<div class="db-error">' + err.message + '</div><div class="db-logout" onclick="window.location.href=\'' + LOGIN_PATH + '\'">Back to login</div>';
+      });
+  }
+
+  function render(data) {
+    var status = data.odoo_status || "unknown";
+    var badgeClass = status === "running" ? "running" : (status === "exited" ? "exited" : "unknown");
+    var started = data.odoo_started_at ? new Date(data.odoo_started_at).toLocaleString() : "—";
+    var cpu = data.stats ? data.stats.cpu : "—";
+    var mem = data.stats ? data.stats.mem : "—";
+    var running = status === "running";
+
+    content.innerHTML =
+      '<div class="db-card">' +
+        '<div class="db-row"><span class="label">Instance</span><span class="value">' + slug + '</span></div>' +
+        '<div class="db-row"><span class="label">Status</span><span class="value"><span class="db-status-badge ' + badgeClass + '">' + status + '</span></span></div>' +
+        '<div class="db-row"><span class="label">Database</span><span class="value">' + (data.db_status || "unknown") + '</span></div>' +
+        '<div class="db-row"><span class="label">CPU Usage</span><span class="value">' + cpu + '</span></div>' +
+        '<div class="db-row"><span class="label">Memory Usage</span><span class="value">' + mem + '</span></div>' +
+        '<div class="db-row"><span class="label">Started At</span><span class="value">' + started + '</span></div>' +
+        '<div class="db-actions">' +
+          '<button class="btn-start" id="btn-start" ' + (running ? "disabled" : "") + '>Start</button>' +
+          '<button class="btn-stop" id="btn-stop" ' + (!running ? "disabled" : "") + '>Stop</button>' +
+          '<button class="btn-restart" id="btn-restart" ' + (!running ? "disabled" : "") + '>Restart</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="db-logout" id="db-logout-link">Log out</div>';
+
+    document.getElementById("btn-start").addEventListener("click", function() { doAction("start"); });
+    document.getElementById("btn-stop").addEventListener("click", function() { doAction("stop"); });
+    document.getElementById("btn-restart").addEventListener("click", function() { doAction("restart"); });
+    document.getElementById("db-logout-link").addEventListener("click", logout);
+  }
+
+  function doAction(action) {
+    fetch(API_BASE + "/instances/" + slug + "/" + action, {
+      method: "POST",
+      headers: { "X-Instance-Password": password }
+    })
+      .then(function(res) { return res.json(); })
+      .then(function() { setTimeout(loadStatus, 2000); })
+      .catch(function(err) {
+        content.innerHTML = '<div class="db-error">Action failed: ' + err + '</div>';
+      });
+  }
+
+  loadStatus();
+})();
+</script>

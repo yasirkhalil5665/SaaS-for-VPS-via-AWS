@@ -6,6 +6,7 @@ from app.models.packages import PACKAGES
 from app.services.odoo_config import wait_for_odoo, create_database, install_modules, configure_company
 from app.services.nginx_manager import generate_nginx_config
 from app.services.email_service import send_welcome_email
+from app.services.auth_store import set_credentials
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -71,6 +72,9 @@ def provision_customer(
         MASTER_PASSWORD, customer_slug,
         admin_login, admin_password,
     )
+
+    # Store credentials so the dashboard can authenticate this customer
+    set_credentials(customer_slug, admin_password)
 
     # 6. Install requested modules (default to base essentials)
     modules = modules or ["sale_management", "crm"]

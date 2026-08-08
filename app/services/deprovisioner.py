@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 from app.services.nginx_manager import remove_nginx_config
+from app.services.auth_store import delete_credentials
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 CUSTOMERS_DIR = BASE_DIR / "customers"
@@ -25,6 +26,7 @@ def deprovision_customer(customer_slug: str, remove_data: bool = True) -> dict:
         }
 
     nginx_result = remove_nginx_config(customer_slug)
+    delete_credentials(customer_slug)
 
     dir_removed = False
     if remove_data and customer_dir.exists():

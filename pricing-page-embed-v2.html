@@ -1,0 +1,232 @@
+<style>
+  .pw2 {
+    font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif;
+    max-width: 1120px;
+    margin: 70px auto;
+    padding: 0 20px;
+  }
+  .pw2-head {
+    text-align: center;
+    margin-bottom: 50px;
+  }
+  .pw2-head .eyebrow {
+    display: inline-block;
+    background: #f3e8f1;
+    color: #714B67;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
+  .pw2-head h2 {
+    font-size: 40px;
+    font-weight: 800;
+    color: #0f0f1a;
+    margin: 0 0 10px;
+    letter-spacing: -0.5px;
+  }
+  .pw2-head p {
+    color: #6b7280;
+    font-size: 17px;
+  }
+  .pw2-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    align-items: stretch;
+  }
+  @media (max-width: 900px) {
+    .pw2-grid { grid-template-columns: 1fr; }
+  }
+  .pw2-card {
+    border-radius: 20px;
+    padding: 36px 30px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  .pw2-card.plain {
+    background: #fafafa;
+    border: 1px solid #ececec;
+  }
+  .pw2-card.dark {
+    background: linear-gradient(160deg, #2b1930 0%, #714B67 100%);
+    color: #fff;
+    transform: scale(1.04);
+    box-shadow: 0 20px 50px rgba(43, 25, 48, 0.35);
+  }
+  .pw2-card.dark::before {
+    content: "";
+    position: absolute;
+    top: -60px;
+    right: -60px;
+    width: 180px;
+    height: 180px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 50%;
+  }
+  .pw2-plan-name {
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.65;
+    margin-bottom: 10px;
+  }
+  .pw2-card.plain .pw2-plan-name { color: #714B67; }
+  .pw2-price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .pw2-price-row .amount {
+    font-size: 46px;
+    font-weight: 800;
+    letter-spacing: -1px;
+  }
+  .pw2-price-row .period {
+    font-size: 14px;
+    opacity: 0.6;
+  }
+  .pw2-card .desc {
+    font-size: 14px;
+    opacity: 0.75;
+    margin-bottom: 26px;
+    line-height: 1.5;
+  }
+  .pw2-divider {
+    height: 1px;
+    background: currentColor;
+    opacity: 0.12;
+    margin-bottom: 22px;
+  }
+  .pw2-feat-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 30px;
+    flex-grow: 1;
+  }
+  .pw2-feat-list li {
+    font-size: 14px;
+    padding: 6px 0;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .pw2-feat-list li .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #714B67;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+  .pw2-card.dark .pw2-feat-list li .dot {
+    background: #fff;
+  }
+  .pw2-cta {
+    display: block;
+    text-align: center;
+    padding: 13px 0;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    text-decoration: none;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+  .pw2-cta:hover { transform: translateY(-2px); }
+  .pw2-card.plain .pw2-cta {
+    background: #0f0f1a;
+    color: #fff;
+  }
+  .pw2-card.dark .pw2-cta {
+    background: #fff;
+    color: #2b1930;
+  }
+  .pw2-tag {
+    position: absolute;
+    top: 24px;
+    right: 30px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    background: rgba(255,255,255,0.15);
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+</style>
+
+<div class="pw2">
+  <div class="pw2-head">
+    <span class="eyebrow">Simple Pricing</span>
+    <h2>Plans that scale with you</h2>
+    <p>Isolated Odoo instances, provisioned in minutes.</p>
+  </div>
+
+  <div class="pw2-grid">
+
+    <div class="pw2-card plain">
+      <div class="pw2-plan-name">Starter</div>
+      <div class="pw2-price-row">
+        <span class="amount">$29</span>
+        <span class="period">/ month</span>
+      </div>
+      <div class="desc">For small teams just getting off the ground.</div>
+      <div class="pw2-divider"></div>
+      <ul class="pw2-feat-list">
+        <li><span class="dot"></span>1 Core CPU · 2 GB RAM</li>
+        <li><span class="dot"></span>20 GB SSD Storage</li>
+        <li><span class="dot"></span>Up to 5 Users</li>
+        <li><span class="dot"></span>1 Company</li>
+        <li><span class="dot"></span>CRM &amp; Sales</li>
+        <li><span class="dot"></span>Daily Backups</li>
+      </ul>
+      <a href="/signup?package=starter" class="pw2-cta">Get Started</a>
+    </div>
+
+    <div class="pw2-card dark">
+      <span class="pw2-tag">POPULAR</span>
+      <div class="pw2-plan-name">Business</div>
+      <div class="pw2-price-row">
+        <span class="amount">$79</span>
+        <span class="period">/ month</span>
+      </div>
+      <div class="desc">For growing teams who need more room to work.</div>
+      <div class="pw2-divider"></div>
+      <ul class="pw2-feat-list">
+        <li><span class="dot"></span>2 Core CPU · 4 GB RAM</li>
+        <li><span class="dot"></span>40 GB SSD Storage</li>
+        <li><span class="dot"></span>Up to 15 Users</li>
+        <li><span class="dot"></span>Up to 3 Companies</li>
+        <li><span class="dot"></span>CRM, Sales, Inventory, Accounting</li>
+        <li><span class="dot"></span>Priority Support</li>
+      </ul>
+      <a href="/signup?package=business" class="pw2-cta">Choose Business</a>
+    </div>
+
+    <div class="pw2-card plain">
+      <div class="pw2-plan-name">Enterprise</div>
+      <div class="pw2-price-row">
+        <span class="amount">$199</span>
+        <span class="period">/ month</span>
+      </div>
+      <div class="desc">Full power and support for serious operations.</div>
+      <div class="pw2-divider"></div>
+      <ul class="pw2-feat-list">
+        <li><span class="dot"></span>4 Core CPU · 8 GB RAM</li>
+        <li><span class="dot"></span>100 GB SSD Storage</li>
+        <li><span class="dot"></span>Unlimited Users</li>
+        <li><span class="dot"></span>Unlimited Companies</li>
+        <li><span class="dot"></span>All Modules Included</li>
+        <li><span class="dot"></span>24/7 Dedicated Support</li>
+      </ul>
+      <a href="/signup?package=enterprise" class="pw2-cta">Contact Sales</a>
+    </div>
+
+  </div>
+</div>
