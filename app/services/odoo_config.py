@@ -146,3 +146,44 @@ def install_modules(
         )
 
     return {"installed": modules}
+
+
+def reset_admin_credentials(
+    host: str,
+    port: int,
+    db_name: str,
+    old_login: str,
+    old_password: str,
+    new_login: str,
+    new_password: str,
+) -> dict:
+    """Used after cloning from the golden template: the cloned database still
+    has the golden template's original admin login/password. This authenticates
+    with those known golden credentials, then changes the admin user's login
+    and password to the new customer's actual chosen ones."""
+    common_url = f"http://{host}:{port}/xmlrpc/2/common"
+    object_url = f"http://{host}:{port}/xmlrpc/2/object"
+
+    common = xmlrpc.client.ServerProxy(common_url, allow_none=True)
+    uid = common.authenticate(db_name, old_login, old_password, {})
+
+    if not uid:
+        return {"success": False, "error": "Could not authenticate with golden template credentials"}
+
+    models = xmlrpc.client.ServerProxy(object_url, allow_none=True)
+
+    user_ids = models.execute_kw(
+        db_name, uid, old_password,
+        "res.users", "search",
+        [[["login", "=", old_login]]],
+    )
+    if not user_ids:
+        return {"success": False, "error": f"Could not find user with login {old_login}"}
+
+    models.execute_kw(
+        db_name, uid, old_password,
+        "res.users", "write",
+        [user_ids, {"login": new_login, "password": new_password}],
+    )
+
+    return {"success": True, "new_login": new_login}

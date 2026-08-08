@@ -29,13 +29,24 @@ def deprovision_customer(customer_slug: str, remove_data: bool = True) -> dict:
     delete_credentials(customer_slug)
 
     dir_removed = False
+    dir_removal_error = None
     if remove_data and customer_dir.exists():
-        shutil.rmtree(customer_dir)
-        dir_removed = True
+        try:
+            shutil.rmtree(customer_dir)
+            dir_removed = True
+        except PermissionError as e:
+            # Docker containers run as root and can leave root-owned files in
+            # bind-mounted folders (data/, postgresql/, etc.) that our user can't delete.
+            dir_removal_error = (
+                f"Permission denied removing {customer_dir}. "
+                f"Docker may have left root-owned files. Run manually: "
+                f"sudo rm -rf {customer_dir}"
+            )
 
     return {
         "customer_slug": customer_slug,
         "docker": docker_result,
         "nginx": nginx_result,
         "directory_removed": dir_removed,
+        "directory_removal_error": dir_removal_error,
     }
