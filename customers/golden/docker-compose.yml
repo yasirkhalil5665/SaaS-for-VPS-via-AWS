@@ -1,7 +1,7 @@
 services:
   odoo:
     image: odoo:19.0
-    container_name: odoo-y
+    container_name: odoo-golden
     user: root
     tty: true
     depends_on:
@@ -13,22 +13,22 @@ services:
       - PASSWORD=odoo
     restart: always
     ports:
-      - "8102:8069"
+      - "8103:8069"
     deploy:
       resources:
         limits:
-          cpus: "2"
-          memory: 4g
-        reservations:
           cpus: "1"
           memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
     networks:
-      net-y:
+      net-golden:
         aliases:
           - odoo
       proxy-net:
         aliases:
-          - y
+          - golden
     volumes:
       - data:/var/lib/odoo
       - config:/etc/odoo
@@ -41,7 +41,7 @@ services:
 
   db:
     image: postgres:16
-    container_name: postgres-y
+    container_name: postgres-golden
     environment:
       - POSTGRES_USER=odoo
       - POSTGRES_PASSWORD=odoo
@@ -51,16 +51,17 @@ services:
       resources:
         limits:
           cpus: "1"
-          memory: 1g
+          memory: 512m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U odoo"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
     volumes:
       - ./postgresql:/var/lib/postgresql/data
     networks:
-      - net-y
+      - net-golden
     logging:
       options:
         max-size: "10m"
@@ -72,7 +73,7 @@ volumes:
   log:
 
 networks:
-  net-y:
+  net-golden:
     driver: bridge
   proxy-net:
     external: true

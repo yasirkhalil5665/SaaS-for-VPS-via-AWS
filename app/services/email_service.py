@@ -1,6 +1,9 @@
 import os
 import smtplib
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+from pathlib import Path
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "1025"))
@@ -38,6 +41,53 @@ The Team
     msg["Subject"] = subject
     msg["From"] = FROM_EMAIL
     msg["To"] = to_email
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            if SMTP_USE_TLS:
+                server.starttls()
+            if SMTP_USER:
+                server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(FROM_EMAIL, [to_email], msg.as_string())
+        return {"sent": True, "to": to_email}
+    except Exception as e:
+        return {"sent": False, "to": to_email, "error": str(e)}
+
+
+def send_invoice_email(
+    to_email: str,
+    invoice: dict,
+    pdf_path: Path,
+) -> dict:
+    subject = f"Invoice #{invoice['invoice_id']} — {invoice['company_name']}"
+    body = f"""Hi,
+
+Please find attached your invoice for the {invoice['package'].capitalize()} plan.
+
+Invoice #: {invoice['invoice_id']}
+Amount: ${invoice['amount']:.2f} {invoice['currency']}
+Due date: {invoice['due_at'][:10]}
+
+Payment can be made via the link in your customer dashboard, or Stripe checkout
+if enabled on your account.
+
+Thanks,
+The Team
+"""
+
+    msg = MIMEMultipart()
+    msg["Subject"] = subject
+    msg["From"] = FROM_EMAIL
+    msg["To"] = to_email
+    msg.attach(MIMEText(body))
+
+    if pdf_path.exists():
+        with open(pdf_path, "rb") as f:
+            attachment = MIMEApplication(f.read(), _subtype="pdf")
+            attachment.add_header(
+                "Content-Disposition", "attachment", filename=f"invoice-{invoice['invoice_id']}.pdf"
+            )
+            msg.attach(attachment)
 
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:

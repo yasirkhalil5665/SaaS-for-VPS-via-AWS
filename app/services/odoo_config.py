@@ -135,6 +135,8 @@ def install_modules(
         return {"installed": [], "error": "Authentication failed"}
 
     models = xmlrpc.client.ServerProxy(object_url, allow_none=True)
+
+    module_ids = models.execute_kw(
         db_name, uid, admin_password,
         "ir.module.module", "search",
         [[["name", "in", modules]]],

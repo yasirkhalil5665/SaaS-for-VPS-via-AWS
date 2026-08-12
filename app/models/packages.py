@@ -4,8 +4,9 @@ PACKAGES = {
         "cpu_reserve": "0.5",
         "memory": "2g",
         "memory_reserve": "1g",
-        "db_cpu": "0.5",
+        "db_cpu": "1",
         "db_memory": "512m",
+        "monthly_price": 29.00,
     },
     "business": {
         "cpu": "2",
@@ -14,6 +15,7 @@ PACKAGES = {
         "memory_reserve": "2g",
         "db_cpu": "1",
         "db_memory": "1g",
+        "monthly_price": 79.00,
     },
     "enterprise": {
         "cpu": "4",
@@ -22,5 +24,6 @@ PACKAGES = {
         "memory_reserve": "4g",
         "db_cpu": "2",
         "db_memory": "2g",
+        "monthly_price": 199.00,
     },
 }
