@@ -105,7 +105,8 @@ def sync_new_customer(
                     "email": customer_email,
                     "password": portal_password,
                     "partner_id": partner_id,
-                    "groups_id": [(6, 0, portal_group_ids)],
+                    # Odoo 19 renamed res.users.groups_id -> group_ids.
+                    "group_ids": [(6, 0, portal_group_ids)],
                 }],
             )
 
