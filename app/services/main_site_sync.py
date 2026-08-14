@@ -26,21 +26,46 @@ def _connect():
     return uid, models
 
 
+def _resolve_country_id(models, uid, country_code):
+    if not country_code:
+        return None
+    country_ids = models.execute_kw(
+        MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+        "res.country", "search",
+        [[["code", "=", country_code]]],
+    )
+    return country_ids[0] if country_ids else None
+
+
 def sync_new_customer(
-    customer_name: str,
+    person_name: str,
+    company_name: str,
     customer_email: str,
     portal_password: str,
     customer_slug: str,
     package: str,
     instance_admin_password: str,
+    customer_phone: str | None = None,
+    country_code: str | None = None,
     domain: str = None,
 ) -> dict:
-    """Creates (or finds) a portal user on the main site and links a
-    saas.instance record to it, so the customer can log in at /web/login
-    and see their instance under /my/instance.
+    """Creates (or finds) a Company contact and a Person contact under it on
+    the main site, a portal user tied to the Person, and links a new
+    saas.instance record for this purchase.
 
-    Called after FastAPI provisioning succeeds. Safe to call multiple times -
-    won't create duplicate partners/users for the same email."""
+    person_name / company_name are deliberately separate - the signup form's
+    "Full Name" and "Company Name" fields are different people/things, and
+    conflating them (as an earlier version of this function did, using one
+    value for both the partner and the login's display name) meant the
+    actual person's name was never captured anywhere.
+
+    One partner can have multiple saas.instance records - a person is
+    expected to be able to buy more than one package. This function does
+    not deduplicate or replace previous instances; it only deduplicates the
+    Company/Person/user records themselves so repeat purchases by the same
+    person don't create duplicate contacts.
+
+    Called after FastAPI provisioning succeeds. Safe to call multiple times."""
     try:
         uid, models = _connect()
     except Exception as e:
@@ -48,22 +73,65 @@ def sync_new_customer(
         return {"success": False, "error": str(e)}
 
     try:
-        # 1. Find or create the partner
-        partner_ids = models.execute_kw(
+        country_id = _resolve_country_id(models, uid, country_code)
+
+        # 1. Find or create the Company contact (is_company=True). Matched by
+        # name - if you have two unrelated customers who happen to use the
+        # exact same company name, they will be merged onto one Company
+        # record. Consider matching on a stronger key (e.g. a normalized
+        # domain from the email) if that becomes a real collision risk.
+        company_id = None
+        if company_name:
+            company_ids = models.execute_kw(
+                MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+                "res.partner", "search",
+                [[["name", "=", company_name], ["is_company", "=", True]]],
+            )
+            if company_ids:
+                company_id = company_ids[0]
+            else:
+                company_vals = {"name": company_name, "is_company": True}
+                if customer_email:
+                    company_vals["email"] = customer_email
+                if customer_phone:
+                    company_vals["phone"] = customer_phone
+                if country_id:
+                    company_vals["country_id"] = country_id
+                company_id = models.execute_kw(
+                    MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+                    "res.partner", "create",
+                    [company_vals],
+                )
+
+        # 2. Find or create the Person contact (is_company=False), linked
+        # under the Company via parent_id. Matched by email, since that's
+        # the actual login identifier.
+        person_ids = models.execute_kw(
             MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
             "res.partner", "search",
-            [[["email", "=", customer_email]]],
+            [[["email", "=", customer_email], ["is_company", "=", False]]],
         )
-        if partner_ids:
-            partner_id = partner_ids[0]
+        if person_ids:
+            person_id = person_ids[0]
         else:
-            partner_id = models.execute_kw(
+            person_vals = {
+                "name": person_name or customer_email.split("@")[0],
+                "email": customer_email,
+                "is_company": False,
+            }
+            if customer_phone:
+                person_vals["phone"] = customer_phone
+            if company_id:
+                person_vals["parent_id"] = company_id
+            if country_id:
+                person_vals["country_id"] = country_id
+            person_id = models.execute_kw(
                 MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
                 "res.partner", "create",
-                [{"name": customer_name, "email": customer_email}],
+                [person_vals],
             )
 
-        # 2. Find or create the portal user for that partner
+        # 3. Find or create the portal user for the Person
         user_ids = models.execute_kw(
             MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
             "res.users", "search",
@@ -100,17 +168,22 @@ def sync_new_customer(
                 MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
                 "res.users", "create",
                 [{
-                    "name": customer_name,
+                    "name": person_name or customer_email.split("@")[0],
                     "login": customer_email,
                     "email": customer_email,
                     "password": portal_password,
-                    "partner_id": partner_id,
+                    "partner_id": person_id,
                     # Odoo 19 renamed res.users.groups_id -> group_ids.
                     "group_ids": [(6, 0, portal_group_ids)],
                 }],
             )
 
-        # 3. Create the saas.instance record linking partner -> their FastAPI instance
+        # 4. Always create a NEW saas.instance record for this purchase -
+        # one person can legitimately buy multiple packages, so this is
+        # intentionally not deduplicated by partner. It IS deduplicated by
+        # customer_slug, since each provisioning run for the same slug
+        # should not create a second record if this function gets called
+        # again for the same purchase (e.g. a retried request).
         existing_instance_ids = models.execute_kw(
             MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
             "saas.instance", "search",
@@ -121,7 +194,7 @@ def sync_new_customer(
                 MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
                 "saas.instance", "create",
                 [{
-                    "partner_id": partner_id,
+                    "partner_id": person_id,
                     "customer_slug": customer_slug,
                     "package": package,
                     "admin_password": instance_admin_password,
@@ -129,7 +202,7 @@ def sync_new_customer(
                 }],
             )
 
-        return {"success": True, "partner_id": partner_id, "user_id": user_id}
+        return {"success": True, "company_id": company_id, "partner_id": person_id, "user_id": user_id}
 
     except Exception as e:
         _logger.warning("Main site sync failed: %s", e)

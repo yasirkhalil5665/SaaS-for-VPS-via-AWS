@@ -44,6 +44,7 @@ def provision_customer(
     admin_password: str = "admin123",
     modules: list[str] | None = None,
     company_info: dict | None = None,
+    full_name: str | None = None,
 ) -> dict:
     if package not in PACKAGES:
         raise ValueError(f"Unknown package: {package}")
@@ -104,7 +105,6 @@ def provision_customer(
             "status": "cloned_from_golden" if restore_result["success"] else "clone_failed",
             "restore_detail": restore_result,
         }
-        install_result = {"installed": "included in golden template", "skipped": True}
 
         if restore_result["success"]:
             reset_result = reset_admin_credentials(
@@ -115,6 +115,28 @@ def provision_customer(
             )
             db_result["credential_reset"] = reset_result
         timer.lap("credential_reset")
+
+        # The golden template only has sale_management + crm baked in.
+        # Without this, any additional apps a customer picked (e.g. on the
+        # pricing page) would be silently dropped whenever the fast path
+        # runs - which is the common case once a golden template exists.
+        # Install only the delta on top of the clone, so the common case
+        # (no extra modules, or just the two baseline ones) stays fast.
+        GOLDEN_BASELINE_MODULES = {"sale_management", "crm"}
+        extra_modules = [m for m in (modules or []) if m not in GOLDEN_BASELINE_MODULES]
+        if extra_modules and restore_result["success"]:
+            extra_install_result = install_modules(
+                "localhost", host_port,
+                customer_slug, admin_login, admin_password,
+                extra_modules,
+            )
+            install_result = {
+                "installed": sorted(GOLDEN_BASELINE_MODULES),
+                "extra_installed": extra_install_result,
+            }
+            timer.lap("install_extra_modules")
+        else:
+            install_result = {"installed": "included in golden template", "skipped": True}
     else:
         db_result = create_database(
             "localhost", host_port,
@@ -179,8 +201,11 @@ def provision_customer(
     main_site_result = None
     if customer_email:
         main_site_result = sync_new_customer(
-            customer_name=(company_info or {}).get("name") or customer_slug,
+            person_name=full_name or customer_email.split("@")[0],
+            company_name=(company_info or {}).get("name") or customer_slug,
             customer_email=customer_email,
+            customer_phone=(company_info or {}).get("phone"),
+            country_code=(company_info or {}).get("country_code"),
             portal_password=admin_password,
             customer_slug=customer_slug,
             package=package,

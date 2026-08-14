@@ -25,6 +25,7 @@ class ProvisionRequest(BaseModel):
     package: str  # "starter" | "business" | "enterprise"
     admin_password: str = "admin123"
     modules: list[str] | None = None
+    full_name: str | None = None  # the signing-up person's own name, distinct from company_info.name
     company_info: CompanyInfo | None = None
 
 
@@ -35,6 +36,7 @@ def _run_provisioning(req: ProvisionRequest, host_port: int):
             req.customer_slug, req.package, host_port,
             req.admin_password, req.modules,
             req.company_info.model_dump(exclude_none=True) if req.company_info else None,
+            req.full_name,
         )
         result["state"] = "done"
         set_status(req.customer_slug, result)
