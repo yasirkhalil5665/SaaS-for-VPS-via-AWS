@@ -13,7 +13,7 @@ services:
       - PASSWORD=odoo
     restart: always
     ports:
-      - "8109:8069"
+      - "8112:8069"
     deploy:
       resources:
         limits:

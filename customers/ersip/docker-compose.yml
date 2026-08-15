@@ -13,15 +13,15 @@ services:
       - PASSWORD=odoo
     restart: always
     ports:
-      - "8111:8069"
+      - "8113:8069"
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: 2g
+          cpus: "4"
+          memory: 8g
         reservations:
-          cpus: "0.5"
-          memory: 1g
+          cpus: "2"
+          memory: 4g
     networks:
       net-ersip:
         aliases:
@@ -50,8 +50,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: 512m
+          cpus: "2"
+          memory: 2g
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U odoo"]
       interval: 2s

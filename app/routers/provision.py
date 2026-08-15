@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
-from app.services.provisioner import provision_customer
+from app.services.provisioner import provision_customer, is_slug_taken
 from app.services.deprovisioner import deprovision_customer
 from app.services.status_store import set_status, get_status, delete_status
 from app.services.port_allocator import get_next_port
@@ -30,29 +30,62 @@ class ProvisionRequest(BaseModel):
 
 
 def _run_provisioning(req: ProvisionRequest, host_port: int):
-    set_status(req.customer_slug, {"state": "in_progress"})
+    def _on_account_ready(info: dict):
+        # Fires as soon as the portal login exists (before Docker starts) -
+        # lets the frontend redirect to /web/login almost immediately
+        # instead of waiting for the full container chain to finish.
+        set_status(req.customer_slug, {
+            "state": "in_progress",
+            "portal_ready": True,
+            "login_email": info.get("login_email"),
+            "main_site_sync": info.get("main_site_sync"),
+        })
+
     try:
         result = provision_customer(
             req.customer_slug, req.package, host_port,
             req.admin_password, req.modules,
             req.company_info.model_dump(exclude_none=True) if req.company_info else None,
             req.full_name,
+            on_account_ready=_on_account_ready,
         )
         result["state"] = "done"
+        result["portal_ready"] = True
         set_status(req.customer_slug, result)
     except Exception as e:
-        set_status(req.customer_slug, {"state": "failed", "error": str(e)})
+        # portal_ready may already be True from _on_account_ready - a failure
+        # here means Docker provisioning failed AFTER the account was
+        # created, not that the account itself failed. Keep portal_ready as
+        # whatever it already was rather than resetting it, so the frontend
+        # doesn't get confused about whether login is possible.
+        existing = get_status(req.customer_slug) or {}
+        set_status(req.customer_slug, {
+            **existing,
+            "state": "failed",
+            "error": str(e),
+        })
 
 
 @router.post("/provision")
 def provision(req: ProvisionRequest, background_tasks: BackgroundTasks):
     if get_status(req.customer_slug) is not None:
-        raise HTTPException(status_code=400, detail="Customer slug already being/has been provisioned")
+        raise HTTPException(
+            status_code=409,
+            detail="This name is already taken. Please choose a different company name.",
+        )
+    if is_slug_taken(req.customer_slug):
+        # Ground-truth filesystem check, independent of the in-memory status
+        # store (which is wiped on restart) - catches real duplicates that
+        # the check above would otherwise miss after any server restart.
+        raise HTTPException(
+            status_code=409,
+            detail="This name is already taken. Please choose a different company name.",
+        )
 
     # Port is always allocated server-side now — client can no longer pick/spoof it
     host_port = get_next_port()
 
-    set_status(req.customer_slug, {"state": "queued"})
+    set_status(req.customer_slug, {"state": "queued", "portal_ready": False})
     background_tasks.add_task(_run_provisioning, req, host_port)
 
     return {

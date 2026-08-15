@@ -4,7 +4,7 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
-# Your MAIN Odoo site (the marketing/pricing site with saas_portal installed) -
+# Your MAIN Odoo site (the marketing/pricing site with saas_dashboard installed) -
 # NOT the customer's own provisioned instance. Set these to match your setup.
 MAIN_SITE_HOST = os.environ.get("MAIN_SITE_HOST", "localhost")
 MAIN_SITE_PORT = int(os.environ.get("MAIN_SITE_PORT", "8069"))
@@ -37,7 +37,7 @@ def _resolve_country_id(models, uid, country_code):
     return country_ids[0] if country_ids else None
 
 
-def sync_new_customer(
+def create_pending_customer(
     person_name: str,
     company_name: str,
     customer_email: str,
@@ -47,25 +47,23 @@ def sync_new_customer(
     instance_admin_password: str,
     customer_phone: str | None = None,
     country_code: str | None = None,
-    domain: str = None,
 ) -> dict:
-    """Creates (or finds) a Company contact and a Person contact under it on
-    the main site, a portal user tied to the Person, and links a new
-    saas.instance record for this purchase.
+    """Creates the Company, Person, portal login, and a saas.instance record
+    (state='provisioning' by default on the model) - deliberately BEFORE any
+    Docker work happens. This is the fast part (a handful of XML-RPC calls,
+    typically well under a second) so the person can be redirected to login
+    almost immediately after submitting the signup form, instead of waiting
+    for the full container provisioning chain to finish first.
 
-    person_name / company_name are deliberately separate - the signup form's
-    "Full Name" and "Company Name" fields are different people/things, and
-    conflating them (as an earlier version of this function did, using one
-    value for both the partner and the login's display name) meant the
-    actual person's name was never captured anywhere.
+    mark_instance_ready() / mark_instance_failed() are called later, once
+    the actual Docker provisioning either succeeds or fails, to flip the
+    same record's state so /my/instance stops showing "setting up".
 
     One partner can have multiple saas.instance records - a person is
-    expected to be able to buy more than one package. This function does
-    not deduplicate or replace previous instances; it only deduplicates the
-    Company/Person/user records themselves so repeat purchases by the same
-    person don't create duplicate contacts.
-
-    Called after FastAPI provisioning succeeds. Safe to call multiple times."""
+    expected to be able to buy more than one package. Company/Person/user
+    records ARE deduplicated (repeat purchases by the same person reuse the
+    same contacts); saas.instance records are not.
+    """
     try:
         uid, models = _connect()
     except Exception as e:
@@ -76,10 +74,9 @@ def sync_new_customer(
         country_id = _resolve_country_id(models, uid, country_code)
 
         # 1. Find or create the Company contact (is_company=True). Matched by
-        # name - if you have two unrelated customers who happen to use the
-        # exact same company name, they will be merged onto one Company
-        # record. Consider matching on a stronger key (e.g. a normalized
-        # domain from the email) if that becomes a real collision risk.
+        # name - two unrelated customers with the exact same company name
+        # will be merged onto one Company record. Consider matching on a
+        # stronger key if that becomes a real collision risk.
         company_id = None
         if company_name:
             company_ids = models.execute_kw(
@@ -104,8 +101,7 @@ def sync_new_customer(
                 )
 
         # 2. Find or create the Person contact (is_company=False), linked
-        # under the Company via parent_id. Matched by email, since that's
-        # the actual login identifier.
+        # under the Company via parent_id. Matched by email.
         person_ids = models.execute_kw(
             MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
             "res.partner", "search",
@@ -140,9 +136,6 @@ def sync_new_customer(
         if user_ids:
             user_id = user_ids[0]
         else:
-            # Resolve base.group_portal by xmlid rather than translated name -
-            # searching res.groups by name="Portal" can silently match 0 or
-            # >1 groups depending on locale/installed modules.
             try:
                 portal_group_ref = models.execute_kw(
                     MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
@@ -154,10 +147,6 @@ def sync_new_customer(
                 portal_group_ids = []
 
             if not portal_group_ids:
-                # Do NOT silently create a user with no group - that produces
-                # an account that can log in but has no portal access at all
-                # (broken/blank /my page). Fail loudly instead so it's caught
-                # during testing rather than discovered by a confused customer.
                 return {
                     "success": False,
                     "error": "Could not resolve base.group_portal on main site - "
@@ -173,24 +162,25 @@ def sync_new_customer(
                     "email": customer_email,
                     "password": portal_password,
                     "partner_id": person_id,
-                    # Odoo 19 renamed res.users.groups_id -> group_ids.
-                    "group_ids": [(6, 0, portal_group_ids)],
+                    "group_ids": [(6, 0, portal_group_ids)],  # Odoo 19 renamed groups_id -> group_ids
                 }],
             )
 
-        # 4. Always create a NEW saas.instance record for this purchase -
-        # one person can legitimately buy multiple packages, so this is
-        # intentionally not deduplicated by partner. It IS deduplicated by
-        # customer_slug, since each provisioning run for the same slug
-        # should not create a second record if this function gets called
-        # again for the same purchase (e.g. a retried request).
+        # 4. Create the saas.instance record for THIS purchase. Deliberately
+        # not deduplicated by partner (multiple packages allowed) - only by
+        # customer_slug, so a retried request doesn't create a duplicate row.
         existing_instance_ids = models.execute_kw(
             MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
             "saas.instance", "search",
             [[["customer_slug", "=", customer_slug]]],
         )
-        if not existing_instance_ids:
-            models.execute_kw(
+        if existing_instance_ids:
+            instance_id = existing_instance_ids[0]
+        else:
+            # state defaults to 'provisioning' on the model itself - not set
+            # explicitly here so this function doesn't need to know the
+            # model's field list beyond what it actually creates.
+            instance_id = models.execute_kw(
                 MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
                 "saas.instance", "create",
                 [{
@@ -198,12 +188,63 @@ def sync_new_customer(
                     "customer_slug": customer_slug,
                     "package": package,
                     "admin_password": instance_admin_password,
-                    "domain": domain,
                 }],
             )
 
-        return {"success": True, "company_id": company_id, "partner_id": person_id, "user_id": user_id}
+        return {
+            "success": True,
+            "company_id": company_id,
+            "partner_id": person_id,
+            "user_id": user_id,
+            "instance_id": instance_id,
+        }
 
     except Exception as e:
-        _logger.warning("Main site sync failed: %s", e)
+        _logger.warning("Main site sync (create_pending_customer) failed: %s", e)
+        return {"success": False, "error": str(e)}
+
+
+def mark_instance_ready(customer_slug: str) -> dict:
+    """Called once Docker provisioning actually finishes successfully."""
+    try:
+        uid, models = _connect()
+        instance_ids = models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "saas.instance", "search",
+            [[["customer_slug", "=", customer_slug]]],
+        )
+        if not instance_ids:
+            return {"success": False, "error": "No saas.instance record found for this slug"}
+        models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "saas.instance", "write",
+            [instance_ids, {"state": "ready", "error_message": False}],
+        )
+        return {"success": True}
+    except Exception as e:
+        _logger.warning("Main site sync (mark_instance_ready) failed: %s", e)
+        return {"success": False, "error": str(e)}
+
+
+def mark_instance_failed(customer_slug: str, error_message: str) -> dict:
+    """Called if Docker provisioning fails after the account was already
+    created - so /my/instance shows a clear failure instead of spinning on
+    "setting up" forever (the meta-refresh only stops once state changes)."""
+    try:
+        uid, models = _connect()
+        instance_ids = models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "saas.instance", "search",
+            [[["customer_slug", "=", customer_slug]]],
+        )
+        if not instance_ids:
+            return {"success": False, "error": "No saas.instance record found for this slug"}
+        models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "saas.instance", "write",
+            [instance_ids, {"state": "failed", "error_message": (error_message or "")[:250]}],
+        )
+        return {"success": True}
+    except Exception as e:
+        _logger.warning("Main site sync (mark_instance_failed) failed: %s", e)
         return {"success": False, "error": str(e)}
