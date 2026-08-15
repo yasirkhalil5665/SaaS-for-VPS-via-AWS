@@ -1,0 +1,10 @@
+{
+  "customer_slug": "company",
+  "package": "business",
+  "host_port": 8116,
+  "domain": "company.localhost",
+  "admin_login": "admin@company.local",
+  "company_name": "company",
+  "customer_email": "yasirkhalil2026@gmail.com",
+  "created_at": "2026-08-15T09:53:08.536501+00:00"
+}
