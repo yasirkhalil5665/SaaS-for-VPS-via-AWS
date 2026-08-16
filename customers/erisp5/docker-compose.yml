@@ -1,7 +1,7 @@
 services:
   odoo:
     image: odoo:19.0
-    container_name: odoo-erisp
+    container_name: odoo-erisp5
     user: root
     tty: true
     depends_on:
@@ -13,7 +13,7 @@ services:
       - PASSWORD=odoo
     restart: always
     ports:
-      - "8114:8069"
+      - "8119:8069"
     deploy:
       resources:
         limits:
@@ -23,12 +23,12 @@ services:
           cpus: "1"
           memory: 2g
     networks:
-      net-erisp:
+      net-erisp5:
         aliases:
           - odoo
       proxy-net:
         aliases:
-          - erisp
+          - erisp5
     volumes:
       - data:/var/lib/odoo
       - config:/etc/odoo
@@ -41,7 +41,7 @@ services:
 
   db:
     image: postgres:16
-    container_name: postgres-erisp
+    container_name: postgres-erisp5
     environment:
       - POSTGRES_USER=odoo
       - POSTGRES_PASSWORD=odoo
@@ -61,7 +61,7 @@ services:
     volumes:
       - ./postgresql:/var/lib/postgresql/data
     networks:
-      - net-erisp
+      - net-erisp5
     logging:
       options:
         max-size: "10m"
@@ -73,7 +73,7 @@ volumes:
   log:
 
 networks:
-  net-erisp:
+  net-erisp5:
     driver: bridge
   proxy-net:
     external: true
