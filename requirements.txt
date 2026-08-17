@@ -1,7 +1,8 @@
 fastapi
-uvicorn[standard]
+uvicorn
 jinja2
 stripe
 aiosmtpd
 python-dotenv
 fpdf2
+
