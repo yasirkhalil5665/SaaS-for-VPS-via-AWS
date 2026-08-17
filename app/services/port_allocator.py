@@ -3,7 +3,6 @@ from threading import Lock
 
 _lock = Lock()
 # Store outside customers/ since Docker sometimes leaves root-owned files in there,
-# which previously caused permission errors writing this counter.
 _STATE_DIR = Path(__file__).resolve().parent.parent.parent / ".state"
 _COUNTER_FILE = _STATE_DIR / "port_counter"
 _BASE_PORT = 8100
