@@ -7,7 +7,6 @@ from app.services.email_service import send_verification_email
 _logger = logging.getLogger(__name__)
 
 # Your MAIN Odoo site (the marketing/pricing site with saas_dashboard installed) -
-# NOT the customer's own provisioned instance. Set these to match your setup.
 MAIN_SITE_HOST = os.environ.get("MAIN_SITE_HOST", "localhost")
 MAIN_SITE_PORT = int(os.environ.get("MAIN_SITE_PORT", "8069"))
 MAIN_SITE_DB = os.environ.get("MAIN_SITE_DB", "Test")

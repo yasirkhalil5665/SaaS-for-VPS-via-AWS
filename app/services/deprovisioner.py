@@ -36,7 +36,6 @@ def deprovision_customer(customer_slug: str, remove_data: bool = True) -> dict:
             dir_removed = True
         except PermissionError as e:
             # Docker containers run as root and can leave root-owned files in
-            # bind-mounted folders (data/, postgresql/, etc.) that our user can't delete.
             dir_removal_error = (
                 f"Permission denied removing {customer_dir}. "
                 f"Docker may have left root-owned files. Run manually: "
