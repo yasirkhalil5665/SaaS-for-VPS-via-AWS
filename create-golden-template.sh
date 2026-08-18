@@ -16,7 +16,9 @@ if docker ps -a --format '{{.Names}}' | grep -q "^postgres-golden$"; then
 else
     echo "No 'golden' customer found. Provisioning one now (this will take ~1-2 min)..."
 
-    # if an old golden.dump exists, provisioning would clone from it
+    # CRITICAL: if an old golden.dump exists, provisioning would clone from it
+    # instead of doing a real fresh install - producing an empty/broken template.
+    # Temporarily move it aside so this provision is guaranteed to be a real install.
     if [ -f "$SCRIPT_DIR/templates/golden.dump" ]; then
         echo "Moving aside existing golden.dump so this build is a real fresh install..."
         mv "$SCRIPT_DIR/templates/golden.dump" "$SCRIPT_DIR/templates/golden.dump.old"

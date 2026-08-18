@@ -22,7 +22,7 @@ def _check_customer(customer_slug: str, x_instance_password: str | None):
         raise HTTPException(status_code=401, detail="Invalid or missing instance password")
 
 
-#  Admin endpoints: generate, review, send, mark paid 
+# --- Admin endpoints: generate, review, send, mark paid ---
 
 @router.post("/admin/customers/{customer_slug}/invoices")
 def admin_create_invoice(customer_slug: str, x_admin_password: str | None = Header(default=None)):
@@ -68,7 +68,7 @@ def admin_mark_paid(customer_slug: str, invoice_id: str, x_admin_password: str |
     return result["invoice"]
 
 
-# Customer-facing endpoints: view and download own invoices 
+# --- Customer-facing endpoints: view and download own invoices ---
 
 @router.get("/instances/{customer_slug}/invoices")
 def customer_list_invoices(customer_slug: str, x_instance_password: str | None = Header(default=None)):

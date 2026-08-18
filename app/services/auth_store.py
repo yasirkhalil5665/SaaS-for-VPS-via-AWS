@@ -3,6 +3,12 @@ import json
 from pathlib import Path
 from threading import Lock
 
+# Previously this was a pure in-memory dict, which meant every uvicorn
+# restart (which happens constantly during development, e.g. via --reload
+# on any watched file change) silently wiped every customer's instance
+# password. That produced 401s ("Session expired") for any instance
+# provisioned before the most recent restart, with no way to recover
+# short of re-provisioning. Persisting to disk fixes that permanently.
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 CUSTOMERS_DIR = BASE_DIR / "customers"
@@ -33,6 +39,7 @@ def verify_credentials(customer_slug: str, admin_password: str) -> bool:
         stored_hash = _cache.get(customer_slug)
         if stored_hash is None:
             # Not in the in-memory cache (e.g. process just restarted) -
+            # fall back to disk before concluding the customer doesn't exist.
             creds_file = _credentials_file(customer_slug)
             if creds_file.exists():
                 try:

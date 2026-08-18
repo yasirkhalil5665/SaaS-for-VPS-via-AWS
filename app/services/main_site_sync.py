@@ -2,11 +2,10 @@ import os
 import xmlrpc.client
 import logging
 
-from app.services.email_service import send_verification_email
-
 _logger = logging.getLogger(__name__)
 
 # Your MAIN Odoo site (the marketing/pricing site with saas_dashboard installed) -
+# NOT the customer's own provisioned instance. Set these to match your setup.
 MAIN_SITE_HOST = os.environ.get("MAIN_SITE_HOST", "localhost")
 MAIN_SITE_PORT = int(os.environ.get("MAIN_SITE_PORT", "8069"))
 MAIN_SITE_DB = os.environ.get("MAIN_SITE_DB", "Test")
@@ -74,66 +73,47 @@ def create_pending_customer(
     try:
         country_id = _resolve_country_id(models, uid, country_code)
 
-        # Person (matched by email) is looked up FIRST, before touching
-        # Company at all. One email = one Person = one Company, permanently.
-        # If this person already exists, their existing parent_id company is
-        # reused regardless of whatever company_name was typed this time -
-        # otherwise, signing up again under a different company name would
-        # create an orphan Company record with no real link to anything,
-        # instead of just adding another package under their real account.
+        # 1. Find or create the Company contact (is_company=True). Matched by
+        # name - two unrelated customers with the exact same company name
+        # will be merged onto one Company record. Consider matching on a
+        # stronger key if that becomes a real collision risk.
+        company_id = None
+        if company_name:
+            company_ids = models.execute_kw(
+                MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+                "res.partner", "search",
+                [[["name", "=", company_name], ["is_company", "=", True]]],
+            )
+            if company_ids:
+                company_id = company_ids[0]
+            else:
+                company_vals = {"name": company_name, "is_company": True}
+                if customer_email:
+                    company_vals["email"] = customer_email
+                if customer_phone:
+                    company_vals["phone"] = customer_phone
+                if country_id:
+                    company_vals["country_id"] = country_id
+                company_id = models.execute_kw(
+                    MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+                    "res.partner", "create",
+                    [company_vals],
+                )
+
+        # 2. Find or create the Person contact (is_company=False), linked
+        # under the Company via parent_id. Matched by email.
         person_ids = models.execute_kw(
             MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
             "res.partner", "search",
             [[["email", "=", customer_email], ["is_company", "=", False]]],
         )
-
-        is_new_person = not person_ids
-        verification_token = None
-
         if person_ids:
             person_id = person_ids[0]
-            existing = models.execute_kw(
-                MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
-                "res.partner", "read",
-                [[person_id]], {"fields": ["parent_id"]},
-            )
-            company_id = existing[0]["parent_id"][0] if existing and existing[0].get("parent_id") else None
         else:
-            # Only for a genuinely new person: find-or-create the Company by
-            # name. Matched by name - two unrelated customers with the exact
-            # same company name will be merged onto one Company record.
-            company_id = None
-            if company_name:
-                company_ids = models.execute_kw(
-                    MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
-                    "res.partner", "search",
-                    [[["name", "=", company_name], ["is_company", "=", True]]],
-                )
-                if company_ids:
-                    company_id = company_ids[0]
-                else:
-                    company_vals = {"name": company_name, "is_company": True}
-                    if customer_email:
-                        company_vals["email"] = customer_email
-                    if customer_phone:
-                        company_vals["phone"] = customer_phone
-                    if country_id:
-                        company_vals["country_id"] = country_id
-                    company_id = models.execute_kw(
-                        MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
-                        "res.partner", "create",
-                        [company_vals],
-                    )
-
-            import secrets
-            verification_token = secrets.token_urlsafe(32)
-
             person_vals = {
                 "name": person_name or customer_email.split("@")[0],
                 "email": customer_email,
                 "is_company": False,
-                "email_verified": False,
-                "email_verification_token": verification_token,
             }
             if customer_phone:
                 person_vals["phone"] = customer_phone
@@ -211,22 +191,12 @@ def create_pending_customer(
                 }],
             )
 
-        # Send the verification email only for a genuinely new person - not
-        # on every repeat purchase, and not blocking the rest of this
-        # function if sending fails (a bounced/misconfigured SMTP setup
-        # shouldn't prevent the account itself from being created).
-        email_result = None
-        if is_new_person and verification_token:
-            verify_url = f"http://{MAIN_SITE_HOST}:{MAIN_SITE_PORT}/verify-email?token={verification_token}"
-            email_result = send_verification_email(customer_email, verify_url)
-
         return {
             "success": True,
             "company_id": company_id,
             "partner_id": person_id,
             "user_id": user_id,
             "instance_id": instance_id,
-            "verification_email": email_result,
         }
 
     except Exception as e:
