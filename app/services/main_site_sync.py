@@ -109,6 +109,20 @@ def create_pending_customer(
         )
         if person_ids:
             person_id = person_ids[0]
+            # BUG FIX: this branch used to just reuse person_id and stop -
+            # any new phone number typed on a repeat signup was silently
+            # discarded, so the contact kept whatever phone (if any) was on
+            # file from the very first signup under this email, forever.
+            # Only write fields that were actually submitted this time, and
+            # only phone for now (name/country have the same reuse gap but
+            # weren't part of what was reported - see PROJECT_SUMMARY_v31.md
+            # Section 7 pattern before touching those too).
+            if customer_phone:
+                models.execute_kw(
+                    MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+                    "res.partner", "write",
+                    [[person_id], {"phone": customer_phone}],
+                )
         else:
             person_vals = {
                 "name": person_name or customer_email.split("@")[0],
@@ -248,3 +262,5 @@ def mark_instance_failed(customer_slug: str, error_message: str) -> dict:
     except Exception as e:
         _logger.warning("Main site sync (mark_instance_failed) failed: %s", e)
         return {"success": False, "error": str(e)}
+
+    
