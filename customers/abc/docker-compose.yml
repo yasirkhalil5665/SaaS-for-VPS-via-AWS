@@ -1,0 +1,79 @@
+services:
+  odoo:
+    image: odoo:19.0
+    container_name: odoo-abc
+    user: root
+    tty: true
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - HOST=db
+      - USER=odoo
+      - PASSWORD=odoo
+    restart: always
+    ports:
+      - "8156:8069"
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8g
+        reservations:
+          cpus: "2"
+          memory: 4g
+    networks:
+      net-abc:
+        aliases:
+          - odoo
+      proxy-net:
+        aliases:
+          - abc
+    volumes:
+      - data:/var/lib/odoo
+      - config:/etc/odoo
+      - ./addons:/mnt/extra-addons
+      - log:/var/log/odoo
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    image: postgres:16
+    container_name: postgres-abc
+    environment:
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=odoo
+      - POSTGRES_DB=postgres
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+    networks:
+      - net-abc
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
+  config:
+  log:
+
+networks:
+  net-abc:
+    driver: bridge
+  proxy-net:
+    external: true

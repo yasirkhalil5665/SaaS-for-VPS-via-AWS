@@ -126,8 +126,16 @@ def provision_customer(
         timer.lap("docker_compose_up")
 
         if result.returncode != 0:
+            # Docker Compose's stderr starts with progress noise ("Creating
+            # volume X... Creating network Y...") and the actual failure
+            # reason is at the END, after all of that. Slicing the first N
+            # characters (the old behavior here) only ever showed the
+            # boilerplate and cut off exactly before the real error - see
+            # the "Setup failed: ...Creating Netw" truncation. Take the tail
+            # instead, with enough room to actually see what broke.
+            error_detail = result.stderr.strip()[-800:]
             if customer_email:
-                mark_instance_failed(customer_slug, f"Container start failed: {result.stderr[:200]}")
+                mark_instance_failed(customer_slug, f"Container start failed: {error_detail}")
             return {
                 "customer_slug": customer_slug,
                 "status": "container_start_failed",
