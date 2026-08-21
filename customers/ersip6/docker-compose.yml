@@ -1,0 +1,79 @@
+services:
+  odoo:
+    image: odoo:19.0
+    container_name: odoo-ersip6
+    user: root
+    tty: true
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - HOST=db
+      - USER=odoo
+      - PASSWORD=odoo
+    restart: always
+    ports:
+      - "8146:8069"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+    networks:
+      net-ersip6:
+        aliases:
+          - odoo
+      proxy-net:
+        aliases:
+          - ersip6
+    volumes:
+      - data:/var/lib/odoo
+      - config:/etc/odoo
+      - ./addons:/mnt/extra-addons
+      - log:/var/log/odoo
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    image: postgres:16
+    container_name: postgres-ersip6
+    environment:
+      - POSTGRES_USER=odoo
+      - POSTGRES_PASSWORD=odoo
+      - POSTGRES_DB=postgres
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+    networks:
+      - net-ersip6
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
+  config:
+  log:
+
+networks:
+  net-ersip6:
+    driver: bridge
+  proxy-net:
+    external: true
