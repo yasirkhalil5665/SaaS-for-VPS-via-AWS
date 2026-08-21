@@ -118,9 +118,7 @@ def provision_customer(
 
         # 3. Run docker compose up -d
         result = subprocess.run(
-            # Explicit -p pins the compose project name to customer_slug
-            # instead of letting compose derive it from the cwd basename.
-            ["docker", "compose", "-p", customer_slug, "-f", str(compose_path), "up", "-d"],
+            ["docker", "compose", "-f", str(compose_path), "up", "-d"],
             cwd=str(customer_dir),
             capture_output=True,
             text=True,
@@ -128,17 +126,8 @@ def provision_customer(
         timer.lap("docker_compose_up")
 
         if result.returncode != 0:
-            # docker compose's normal first-run output is a wall of
-            # "Network X Creating/Created", "Volume Y Creating/Created" -
-            # completely expected, not an error. The actual failure reason
-            # is always further down. Truncating from the *front*
-            # (stderr[:200]) chopped off the real message and left only
-            # this noise. Log the full output server-side, and surface the
-            # tail (where docker puts the real error) to the customer.
-            print(f"[provision:{customer_slug}] docker compose up failed (rc={result.returncode}):\n{result.stderr}")
             if customer_email:
-                tail = result.stderr.strip()[-500:]
-                mark_instance_failed(customer_slug, f"Container start failed: {tail}")
+                mark_instance_failed(customer_slug, f"Container start failed: {result.stderr[:200]}")
             return {
                 "customer_slug": customer_slug,
                 "status": "container_start_failed",

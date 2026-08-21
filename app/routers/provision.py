@@ -1,5 +1,7 @@
+import re
+
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.services.provisioner import provision_customer, is_slug_taken
 from app.services.deprovisioner import deprovision_customer
@@ -7,6 +9,16 @@ from app.services.status_store import set_status, get_status, delete_status
 from app.services.port_allocator import get_next_port
 
 router = APIRouter()
+
+# Matches Docker container/network/volume naming rules AND is safe as a
+# single filesystem path segment (no '..', no '/', no leading dot). The
+# client (signup.html) already runs its own slugify() before sending this,
+# but that's cosmetic only - nothing here previously re-checked it
+# server-side, so a hand-crafted request (or a bug in some future client)
+# could send "../../etc" straight into CUSTOMERS_DIR / customer_slug, or a
+# slug with characters that are invalid in a Docker Compose network name
+# and make "docker compose up" fail outright.
+SLUG_RE = re.compile(r"^[a-z][a-z0-9-]{1,38}[a-z0-9]$")
 
 
 class CompanyInfo(BaseModel):
@@ -28,6 +40,16 @@ class ProvisionRequest(BaseModel):
     full_name: str | None = None  # the signing-up person's own name, distinct from company_info.name
     referral_token: str | None = None  # from /signup?ref=<token> - resolved against saas.referral in saas_dashboard
     company_info: CompanyInfo | None = None
+
+    @field_validator("customer_slug")
+    @classmethod
+    def validate_customer_slug(cls, v: str) -> str:
+        if not SLUG_RE.match(v):
+            raise ValueError(
+                "customer_slug must be 3-40 characters, lowercase letters/numbers/hyphens only, "
+                "starting and ending with a letter or number"
+            )
+        return v
 
 
 def _run_provisioning(req: ProvisionRequest, host_port: int):
