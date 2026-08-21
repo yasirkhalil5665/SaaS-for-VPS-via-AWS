@@ -27,4 +27,3 @@ PACKAGES = {
         "monthly_price": 199.00,
     },
 }
-

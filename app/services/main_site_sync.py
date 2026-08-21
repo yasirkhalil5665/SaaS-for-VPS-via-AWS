@@ -47,6 +47,7 @@ def create_pending_customer(
     instance_admin_password: str,
     customer_phone: str | None = None,
     country_code: str | None = None,
+    referral_token: str | None = None,
 ) -> dict:
     """Creates the Company, Person, portal login, and a saas.instance record
     (state='provisioning' by default on the model) - deliberately BEFORE any
@@ -140,6 +141,32 @@ def create_pending_customer(
                 "res.partner", "create",
                 [person_vals],
             )
+
+            # Referral resolution - only on a genuinely NEW person record.
+            # Deliberately not done for the existing-person reuse branch
+            # above: attributing a repeat customer to whoever's link they
+            # happened to click on a later, unrelated purchase would be
+            # wrong - a referral should reflect who brought them onto the
+            # platform in the first place, set once, never overwritten.
+            #
+            # Resolved against saas.referral (saas_dashboard module), which
+            # tracks one record per invited email - NOT a field on
+            # res.partner - because the portal's "Reseller Invite" page
+            # needs to show each invite separately (who was invited, by
+            # email, whether they've signed up yet), which a single
+            # referral_token-on-res.partner design can't represent.
+            #
+            # A missing/invalid/already-resolved token is not an error - it
+            # just means this signup isn't attributed to any invite.
+            if referral_token:
+                try:
+                    models.execute_kw(
+                        MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+                        "saas.referral", "resolve_token",
+                        [[], referral_token, person_id],
+                    )
+                except Exception:
+                    pass
 
         # 3. Find or create the portal user for the Person
         user_ids = models.execute_kw(
@@ -262,5 +289,3 @@ def mark_instance_failed(customer_slug: str, error_message: str) -> dict:
     except Exception as e:
         _logger.warning("Main site sync (mark_instance_failed) failed: %s", e)
         return {"success": False, "error": str(e)}
-
-    

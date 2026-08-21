@@ -54,6 +54,7 @@ def provision_customer(
     modules: list[str] | None = None,
     company_info: dict | None = None,
     full_name: str | None = None,
+    referral_token: str | None = None,
     on_account_ready: Callable[[dict], None] | None = None,
 ) -> dict:
     """on_account_ready, if given, is called as soon as the portal login
@@ -92,6 +93,7 @@ def provision_customer(
             customer_slug=customer_slug,
             package=package,
             instance_admin_password=admin_password,
+            referral_token=referral_token,
         )
     timer.lap("main_site_sync_create")
 

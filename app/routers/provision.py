@@ -26,6 +26,7 @@ class ProvisionRequest(BaseModel):
     admin_password: str = "admin123"
     modules: list[str] | None = None
     full_name: str | None = None  # the signing-up person's own name, distinct from company_info.name
+    referral_token: str | None = None  # from /signup?ref=<token> - resolved against saas.referral in saas_dashboard
     company_info: CompanyInfo | None = None
 
 
@@ -47,6 +48,7 @@ def _run_provisioning(req: ProvisionRequest, host_port: int):
             req.admin_password, req.modules,
             req.company_info.model_dump(exclude_none=True) if req.company_info else None,
             req.full_name,
+            req.referral_token,
             on_account_ready=_on_account_ready,
         )
         result["state"] = "done"
