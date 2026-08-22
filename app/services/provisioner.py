@@ -9,10 +9,9 @@ from jinja2 import Environment, FileSystemLoader
 from app.models.packages import PACKAGES
 from app.services.odoo_config import wait_for_odoo, create_database, install_modules, configure_company, reset_admin_credentials
 from app.services.nginx_manager import generate_nginx_config
-from app.services.email_service import send_welcome_email
 from app.services.auth_store import set_credentials
 from app.services.golden_template import golden_template_available, restore_from_golden, GOLDEN_ADMIN_LOGIN, GOLDEN_ADMIN_PASSWORD
-from app.services.main_site_sync import create_pending_customer, mark_instance_ready, mark_instance_failed
+from app.services.main_site_sync import create_pending_customer, mark_instance_ready, mark_instance_failed, send_welcome_email_via_odoo
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -245,12 +244,15 @@ def provision_customer(
         nginx_result = generate_nginx_config(customer_slug)
         timer.lap("nginx_config")
 
-        # 8. Send welcome email
+        # 8. Send welcome email - through Odoo's own mail server, not a
+        # separate raw SMTP connection, so it shows up in Settings >
+        # Technical > Email > Emails and uses the same credentials
+        # configured there.
         email_result = None
         if customer_email:
-            email_result = send_welcome_email(
-                to_email=customer_email,
+            email_result = send_welcome_email_via_odoo(
                 customer_slug=customer_slug,
+                customer_email=customer_email,
                 domain=nginx_result["domain"],
                 admin_login=admin_login,
                 admin_password=admin_password,

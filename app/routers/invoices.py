@@ -5,7 +5,7 @@ from app.services.invoice_manager import (
     create_invoice, list_invoices, get_invoice, update_invoice_status,
     get_invoice_pdf_path, load_customer_meta,
 )
-from app.services.email_service import send_invoice_email
+from app.services.main_site_sync import send_invoice_email_via_odoo
 from app.services.admin_auth import verify_admin_password
 from app.services.auth_store import verify_credentials
 
@@ -55,7 +55,7 @@ def admin_send_invoice(customer_slug: str, invoice_id: str, x_admin_password: st
     if not to_email:
         raise HTTPException(status_code=400, detail="No customer email on file")
 
-    result = send_invoice_email(to_email, invoice, pdf_path)
+    result = send_invoice_email_via_odoo(customer_slug, to_email, invoice, pdf_path.read_bytes())
     return result
 
 

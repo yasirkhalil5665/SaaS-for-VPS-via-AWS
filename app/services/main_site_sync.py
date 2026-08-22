@@ -289,3 +289,101 @@ def mark_instance_failed(customer_slug: str, error_message: str) -> dict:
     except Exception as e:
         _logger.warning("Main site sync (mark_instance_failed) failed: %s", e)
         return {"success": False, "error": str(e)}
+
+
+def send_welcome_email_via_odoo(customer_slug: str, customer_email: str, domain: str,
+                                 admin_login: str, admin_password: str, package: str) -> dict:
+    """Replaces the old email_service.send_welcome_email(), which used its
+    own raw smtplib connection with separate SMTP_* env vars, completely
+    bypassing Odoo - meaning it never showed up in Settings > Technical >
+    Email > Emails, and used different credentials than whatever's actually
+    configured as the Outgoing Mail Server there. Routes through
+    saas.instance.send_transactional_email() instead, so it's a real Odoo
+    mail.mail record sent via Odoo's own configured mail server."""
+    subject = f"Your Odoo instance is ready - {customer_slug}"
+    body_html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+            <p style="font-size: 15px; color: #212529;">
+                Your Odoo instance has been provisioned and is ready to use.
+            </p>
+            <table style="font-size: 14px; color: #212529; margin: 20px 0;">
+                <tr><td style="color:#6c757d; padding: 4px 12px 4px 0;">Instance URL</td><td>http://{domain}</td></tr>
+                <tr><td style="color:#6c757d; padding: 4px 12px 4px 0;">Package</td><td>{package}</td></tr>
+                <tr><td style="color:#6c757d; padding: 4px 12px 4px 0;">Login</td><td>{admin_login}</td></tr>
+                <tr><td style="color:#6c757d; padding: 4px 12px 4px 0;">Password</td><td>{admin_password}</td></tr>
+            </table>
+            <p style="font-size: 13px; color: #6c757d;">
+                If you have any questions, reach out to our support team.
+            </p>
+        </div>
+    """
+    try:
+        uid, models = _connect()
+        instance_ids = models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "saas.instance", "search",
+            [[["customer_slug", "=", customer_slug]]],
+        )
+        if not instance_ids:
+            return {"success": False, "error": "No saas.instance record found for this slug"}
+        result = models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "saas.instance", "send_transactional_email",
+            [instance_ids[:1], subject, body_html, customer_email],
+        )
+        return result if isinstance(result, dict) else {"success": bool(result)}
+    except Exception as e:
+        _logger.warning("Welcome email via Odoo failed for %s: %s", customer_slug, e)
+        return {"success": False, "error": str(e)}
+
+
+def send_invoice_email_via_odoo(customer_slug: str, customer_email: str, invoice: dict, pdf_bytes: bytes | None) -> dict:
+    """Replaces the old email_service.send_invoice_email() - same reasoning
+    as send_welcome_email_via_odoo above: routes through Odoo's own mail
+    server instead of a separate raw SMTP connection, and the PDF gets
+    attached as a real Odoo attachment on the mail.mail record instead of
+    just being an email attachment nobody in Odoo can see afterward."""
+    subject = f"Invoice #{invoice['invoice_id']} - {invoice['company_name']}"
+    body_html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+            <p style="font-size: 15px; color: #212529;">
+                Please find attached your invoice for the {invoice['package'].capitalize()} plan.
+            </p>
+            <table style="font-size: 14px; color: #212529; margin: 20px 0;">
+                <tr><td style="color:#6c757d; padding: 4px 12px 4px 0;">Invoice #</td><td>{invoice['invoice_id']}</td></tr>
+                <tr><td style="color:#6c757d; padding: 4px 12px 4px 0;">Amount</td><td>${invoice['amount']:.2f} {invoice['currency']}</td></tr>
+                <tr><td style="color:#6c757d; padding: 4px 12px 4px 0;">Due date</td><td>{invoice['due_at'][:10]}</td></tr>
+            </table>
+            <p style="font-size: 13px; color: #6c757d;">
+                Payment can be made via the link in your customer dashboard, or Stripe checkout
+                if enabled on your account.
+            </p>
+        </div>
+    """
+    try:
+        uid, models = _connect()
+        instance_ids = models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "saas.instance", "search",
+            [[["customer_slug", "=", customer_slug]]],
+        )
+        if not instance_ids:
+            return {"success": False, "error": "No saas.instance record found for this slug"}
+
+        args = [instance_ids[:1], subject, body_html, customer_email]
+        kwargs = {}
+        if pdf_bytes:
+            import base64
+            kwargs = {
+                "attachment_name": f"invoice-{invoice['invoice_id']}.pdf",
+                "attachment_base64": base64.b64encode(pdf_bytes).decode("ascii"),
+            }
+        result = models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "saas.instance", "send_transactional_email",
+            args, kwargs,
+        )
+        return result if isinstance(result, dict) else {"success": bool(result)}
+    except Exception as e:
+        _logger.warning("Invoice email via Odoo failed for %s: %s", customer_slug, e)
+        return {"success": False, "error": str(e)}
