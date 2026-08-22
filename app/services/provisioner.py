@@ -134,6 +134,23 @@ def provision_customer(
             # the "Setup failed: ...Creating Netw" truncation. Take the tail
             # instead, with enough room to actually see what broke.
             error_detail = result.stderr.strip()[-800:]
+
+            # Whatever docker compose up managed to create before it failed
+            # (volumes are typically created before the network, per the
+            # "Creating Volume... Creating Network..." ordering in the
+            # error output) was previously left behind permanently - every
+            # failed attempt leaked orphaned volumes/networks that were
+            # never cleaned up. That's a real contributing factor to "all
+            # predefined address pools have been fully subnetted": each
+            # leaked network (even a failed one that partially registered)
+            # eats into the same limited pool that live customer instances
+            # draw from. Best-effort cleanup here, ignoring its own failures
+            # since the person already has a real error to deal with.
+            subprocess.run(
+                ["docker", "compose", "-f", str(compose_path), "down", "-v"],
+                cwd=str(customer_dir), capture_output=True, text=True,
+            )
+
             if customer_email:
                 mark_instance_failed(customer_slug, f"Container start failed: {error_detail}")
             return {
