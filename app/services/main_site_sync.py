@@ -168,13 +168,21 @@ def create_pending_customer(
             # just means this signup isn't attributed to any invite.
             if referral_token:
                 try:
-                    models.execute_kw(
+                    resolved = models.execute_kw(
                         MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
                         "saas.referral", "resolve_token",
                         [[], referral_token, person_id],
                     )
-                except Exception:
-                    pass
+                    if not resolved:
+                        _logger.warning(
+                            "Referral token did not resolve (no matching invited "
+                            "record found): token=%s person_id=%s", referral_token, person_id,
+                        )
+                except Exception as e:
+                    _logger.warning(
+                        "Referral resolution raised an exception: token=%s person_id=%s error=%s",
+                        referral_token, person_id, e,
+                    )
 
         # 3. Find or create the portal user for the Person
         user_ids = models.execute_kw(
