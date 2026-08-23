@@ -8,7 +8,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from app.models.packages import PACKAGES
 from app.services.odoo_config import wait_for_odoo, create_database, install_modules, configure_company, reset_admin_credentials
-from app.services.nginx_manager import generate_nginx_config
+from app.services.nginx_manager import generate_nginx_config, BASE_DOMAIN
 from app.services.auth_store import set_credentials
 from app.services.golden_template import golden_template_available, restore_from_golden, GOLDEN_ADMIN_LOGIN, GOLDEN_ADMIN_PASSWORD
 from app.services.main_site_sync import create_pending_customer, mark_instance_ready, mark_instance_failed, send_welcome_email_via_odoo
@@ -95,6 +95,27 @@ def provision_customer(
             referral_token=referral_token,
         )
     timer.lap("main_site_sync_create")
+
+    # Welcome email fires here, right after the account exists - NOT after
+    # step 8 (old location, after the full Docker pipeline: compose up,
+    # wait_for_odoo, database creation, module installs, nginx). That made
+    # the email wait 15-30+ seconds for something it doesn't actually need,
+    # since the domain is just f"{customer_slug}.{BASE_DOMAIN}" - the exact
+    # same value nginx will end up configuring, computed independently here
+    # rather than waiting for nginx_result. This matches the "fast login"
+    # principle already used everywhere else: the account/login is usable
+    # immediately, the actual instance finishes provisioning in the
+    # background - the email should reflect that, not silently contradict it.
+    if customer_email:
+        send_welcome_email_via_odoo(
+            customer_slug=customer_slug,
+            customer_email=customer_email,
+            domain=f"{customer_slug}.{BASE_DOMAIN}",
+            admin_login=admin_login,
+            admin_password=admin_password,
+            package=package,
+        )
+    timer.lap("send_email")
 
     if on_account_ready:
         on_account_ready({
@@ -244,21 +265,10 @@ def provision_customer(
         nginx_result = generate_nginx_config(customer_slug)
         timer.lap("nginx_config")
 
-        # 8. Send welcome email - through Odoo's own mail server, not a
-        # separate raw SMTP connection, so it shows up in Settings >
-        # Technical > Email > Emails and uses the same credentials
-        # configured there.
-        email_result = None
-        if customer_email:
-            email_result = send_welcome_email_via_odoo(
-                customer_slug=customer_slug,
-                customer_email=customer_email,
-                domain=nginx_result["domain"],
-                admin_login=admin_login,
-                admin_password=admin_password,
-                package=package,
-            )
-        timer.lap("send_email")
+        # (Welcome email already sent above, right after account creation -
+        # see the "fast login" comment near on_account_ready. Nothing to do
+        # here anymore; email_result below is just for the response payload.)
+        email_result = {"note": "sent earlier, immediately after account creation"}
 
         # 9. Save persistent metadata
         meta = {
