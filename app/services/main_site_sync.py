@@ -12,6 +12,14 @@ MAIN_SITE_DB = os.environ.get("MAIN_SITE_DB", "Test")
 MAIN_SITE_ADMIN_LOGIN = os.environ.get("MAIN_SITE_ADMIN_LOGIN", "odoo")
 MAIN_SITE_ADMIN_PASSWORD = os.environ.get("MAIN_SITE_ADMIN_PASSWORD", "")
 
+# Shared sender for transactional emails (welcome, invoice) sent via
+# saas.instance.send_transactional_email(). Without this, Odoo has no
+# email_from at all unless mail.catchall.domain / mail.default.from are
+# configured system-wide - which produced exactly the "You must either
+# provide a sender address explicitly or configure..." error. Same address
+# already confirmed working for referral invites.
+TRANSACTIONAL_EMAIL_FROM = os.environ.get("TRANSACTIONAL_EMAIL_FROM", "18G491@gmail.com")
+
 
 def _connect():
     common_url = f"http://{MAIN_SITE_HOST}:{MAIN_SITE_PORT}/xmlrpc/2/common"
@@ -329,7 +337,7 @@ def send_welcome_email_via_odoo(customer_slug: str, customer_email: str, domain:
         result = models.execute_kw(
             MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
             "saas.instance", "send_transactional_email",
-            [instance_ids[:1], subject, body_html, customer_email],
+            [instance_ids[:1], subject, body_html, customer_email, TRANSACTIONAL_EMAIL_FROM],
         )
         return result if isinstance(result, dict) else {"success": bool(result)}
     except Exception as e:
@@ -370,7 +378,7 @@ def send_invoice_email_via_odoo(customer_slug: str, customer_email: str, invoice
         if not instance_ids:
             return {"success": False, "error": "No saas.instance record found for this slug"}
 
-        args = [instance_ids[:1], subject, body_html, customer_email]
+        args = [instance_ids[:1], subject, body_html, customer_email, TRANSACTIONAL_EMAIL_FROM]
         kwargs = {}
         if pdf_bytes:
             import base64
