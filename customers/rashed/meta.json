@@ -1,0 +1,10 @@
+{
+  "customer_slug": "rashed",
+  "package": "business",
+  "host_port": 8191,
+  "domain": "rashed.localhost",
+  "admin_login": "admin@rashed.local",
+  "company_name": "rashed",
+  "customer_email": "engineerzahidali@gmail.com",
+  "created_at": "2026-08-24T08:55:17.061302+00:00"
+}
