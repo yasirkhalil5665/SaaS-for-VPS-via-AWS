@@ -45,6 +45,74 @@ def _resolve_country_id(models, uid, country_code):
     return country_ids[0] if country_ids else None
 
 
+def email_has_account(email: str) -> dict:
+    """Used by /signup/request-code to refuse re-signup with an email that
+    already has a portal login on the main site - they should log in
+    instead, not get handed a second account/instance under the same
+    address. Returns {"exists": bool} on success, {"exists": False,
+    "error": ...} if the connection itself failed (fails open - a main-site
+    outage shouldn't be what blocks new signups)."""
+    try:
+        uid, models = _connect()
+        user_ids = models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "res.users", "search",
+            [[["login", "=", email]]],
+        )
+        return {"exists": bool(user_ids)}
+    except Exception as e:
+        _logger.warning("Main site sync (email_has_account) failed: %s", e)
+        return {"exists": False, "error": str(e)}
+
+
+def send_verification_email_via_odoo(customer_email: str, code: str) -> dict:
+    """Sends the signup verification code through Odoo's own configured
+    mail server - same mechanism as send_welcome_email_via_odoo /
+    send_invoice_email_via_odoo below, via saas.instance.send_transactional_email().
+    Called on an EMPTY recordset ([]) rather than a real instance's id,
+    since no saas.instance exists yet at verification time - the method
+    itself is written to support that (see its docstring: "static send, not
+    tied to needing self to be a real instance record"), same pattern
+    saas.referral.resolve_token() uses.
+
+    This replaces an earlier version that sent this one email via raw
+    smtplib with its own SMTP_* env vars, which - like the old
+    email_service.py this project already moved away from once - bypassed
+    Odoo entirely, so it never showed up in Settings > Technical > Email >
+    Emails and used different credentials than whatever's actually
+    configured as the Outgoing Mail Server there.
+    """
+    subject = "Your verification code"
+    body_html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 460px; margin: 0 auto;">
+            <div style="background: linear-gradient(160deg, #2b1930 0%, #714B67 100%); border-radius: 12px; padding: 36px 32px; text-align: center;">
+                <p style="color: rgba(255,255,255,0.75); font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin: 0 0 18px;">
+                    Verify your email
+                </p>
+                <div style="background: rgba(255,255,255,0.1); border-radius: 10px; padding: 20px; margin-bottom: 18px;">
+                    <span style="color: #ffffff; font-size: 36px; font-weight: 700; letter-spacing: 10px;">
+                        {code}
+                    </span>
+                </div>
+                <p style="color: rgba(255,255,255,0.6); font-size: 13px; margin: 0;">
+                    This code expires in 10 minutes. If you didn't request this, you can ignore this email.
+                </p>
+            </div>
+        </div>
+    """
+    try:
+        uid, models = _connect()
+        result = models.execute_kw(
+            MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
+            "saas.instance", "send_transactional_email",
+            [[], subject, body_html, customer_email, TRANSACTIONAL_EMAIL_FROM],
+        )
+        return result if isinstance(result, dict) else {"ok": bool(result)}
+    except Exception as e:
+        _logger.warning("Verification email via Odoo failed for %s: %s", customer_email, e)
+        return {"ok": False, "error": str(e)}
+
+
 def create_pending_customer(
     person_name: str,
     company_name: str,
@@ -226,6 +294,18 @@ def create_pending_customer(
         # 4. Create the saas.instance record for THIS purchase. Deliberately
         # not deduplicated by partner (multiple packages allowed) - only by
         # customer_slug, so a retried request doesn't create a duplicate row.
+        #
+        # trial_end = 7 days from now - every signup starts on a free trial
+        # with no payment collected upfront; billing sends an invoice once
+        # the trial period is over instead (see invoice_manager.py /
+        # /invoices router). Requires the saas_dashboard module to have a
+        # `trial_end` Datetime field on saas.instance - if that field
+        # hasn't been added/upgraded yet, this write will simply fail for
+        # that key and Odoo raises, which the except below reports as a
+        # normal main_site_sync failure rather than silently dropping it.
+        import datetime
+        trial_end = (datetime.datetime.utcnow() + datetime.timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+
         existing_instance_ids = models.execute_kw(
             MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
             "saas.instance", "search",
@@ -245,6 +325,7 @@ def create_pending_customer(
                     "customer_slug": customer_slug,
                     "package": package,
                     "admin_password": instance_admin_password,
+                    "trial_end": trial_end,
                 }],
             )
 
@@ -328,6 +409,10 @@ def send_welcome_email_via_odoo(customer_slug: str, customer_email: str, domain:
                 <tr><td style="color:#6c757d; padding: 4px 12px 4px 0;">Login</td><td>{admin_login}</td></tr>
                 <tr><td style="color:#6c757d; padding: 4px 12px 4px 0;">Password</td><td>{admin_password}</td></tr>
             </table>
+            <p style="font-size: 13px; color: #212529; background: #f3e8f1; border-radius: 6px; padding: 10px 14px;">
+                You're on a <strong>free 7-day trial</strong> - no payment taken today. We'll email
+                you an invoice once the trial ends.
+            </p>
             <p style="font-size: 13px; color: #6c757d;">
                 If you have any questions, reach out to our support team.
             </p>

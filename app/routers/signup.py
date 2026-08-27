@@ -1,11 +1,7 @@
-import os
 import re
 import random
 import secrets
-import smtplib
 import time
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from threading import Lock
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
@@ -14,11 +10,18 @@ from pydantic import BaseModel, field_validator
 from app.services.status_store import get_status, set_status
 from app.services.provisioner import is_slug_taken
 from app.services.port_allocator import get_next_port
+from app.services.main_site_sync import email_has_account, send_verification_email_via_odoo
 from app.routers.provision import ProvisionRequest, CompanyInfo, SLUG_RE, _run_provisioning
 
 router = APIRouter(prefix="/signup", tags=["signup"])
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# Single-plan signup now - "business" is the only package the signup form
+# offers (see signup-form-embed-v3.html). starter/enterprise still exist as
+# valid Selection values on saas.instance for any pre-existing records, but
+# new signups always land on business.
+DEFAULT_PACKAGE = "business"
 
 # ---------------------------------------------------------------------------
 # Verification codes - in-memory, short-lived (10 min), so a uvicorn --reload
@@ -76,38 +79,6 @@ def _check_code(email: str, code: str) -> str | None:
         return entry["password"]
 
 
-# ---------------------------------------------------------------------------
-# Raw SMTP send - used ONLY for this verification code. Everything else in
-# this project (welcome email, invoices) routes through Odoo's own mail
-# server via saas.instance.send_transactional_email() (see main_site_sync.py)
-# because it needs a saas.instance record to hang off of. At verification
-# time no Odoo account exists yet, so this uses the SMTP_* env vars directly.
-# ---------------------------------------------------------------------------
-def _send_email(to_email: str, subject: str, body_text: str, body_html: str) -> None:
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_password = os.environ.get("SMTP_PASSWORD", "")
-    use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() == "true"
-    from_email = os.environ.get("FROM_EMAIL", smtp_user)
-
-    if not smtp_user or not smtp_password:
-        raise RuntimeError("SMTP is not configured (set SMTP_USER / SMTP_PASSWORD in .env)")
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = from_email
-    msg["To"] = to_email
-    msg.attach(MIMEText(body_text, "plain"))
-    msg.attach(MIMEText(body_html, "html"))
-
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
-        if use_tls:
-            server.starttls()
-        server.login(smtp_user, smtp_password)
-        server.sendmail(from_email, [to_email], msg.as_string())
-
-
 def _slug_base_from_email(email: str) -> str:
     local = re.sub(r"[^a-z0-9-]+", "-", email.split("@")[0].lower()).strip("-")
     return local[:28] or "customer"
@@ -155,7 +126,7 @@ class RequestCodeBody(BaseModel):
 class VerifyCodeBody(BaseModel):
     email: str
     code: str
-    package: str = "starter"  # from ?package= on the pricing page, same default /provision used
+    package: str = DEFAULT_PACKAGE
 
     @field_validator("email")
     @classmethod
@@ -173,6 +144,17 @@ class VerifyCodeBody(BaseModel):
 # ---------------------------------------------------------------------------
 @router.post("/request-code")
 def request_code(body: RequestCodeBody):
+    # Refuse re-signup on an email that already has a portal login - they
+    # should log in instead of getting a second account/instance under the
+    # same address. Checked here, before sending a code, so nobody gets a
+    # working OTP for an account they can't actually create.
+    existing = email_has_account(body.email)
+    if existing.get("exists"):
+        raise HTTPException(
+            status_code=409,
+            detail="An account with this email already exists. Please log in instead.",
+        )
+
     if not _can_resend(body.email):
         raise HTTPException(
             status_code=429,
@@ -181,19 +163,15 @@ def request_code(body: RequestCodeBody):
 
     code = _create_code(body.email, body.password)
 
-    try:
-        _send_email(
-            to_email=body.email,
-            subject="Your verification code",
-            body_text=f"Your verification code is {code}. It expires in 10 minutes.",
-            body_html=(
-                f"<p>Your verification code is "
-                f"<strong style='font-size:20px; letter-spacing:2px;'>{code}</strong></p>"
-                f"<p style='color:#6b7280; font-size:13px;'>It expires in 10 minutes.</p>"
-            ),
-        )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not send verification email: {e}")
+    # Sent through Odoo's own configured mail server (main site), not raw
+    # smtplib - same mechanism as the welcome and invoice emails, see
+    # main_site_sync.send_verification_email_via_odoo().
+    result = send_verification_email_via_odoo(body.email, code)
+    if not result.get("ok", True) and result.get("error"):
+        # send_transactional_email() returns {"ok": False, "error": ...} on
+        # a real failure; a bare successful XML-RPC call with no "ok" key at
+        # all is also treated as success (older/looser return shapes).
+        raise HTTPException(status_code=502, detail=f"Could not send verification email: {result['error']}")
 
     return {"sent": True, "email": body.email}
 
@@ -212,7 +190,7 @@ def verify_code(body: VerifyCodeBody, background_tasks: BackgroundTasks):
     # not at signup time anymore.
     req = ProvisionRequest(
         customer_slug=customer_slug,
-        package=body.package,
+        package=body.package or DEFAULT_PACKAGE,
         admin_password=password,
         company_info=CompanyInfo(email=body.email),
     )
