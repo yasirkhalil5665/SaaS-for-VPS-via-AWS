@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.provision import router as provision_router
+from app.routers.signup import router as signup_router
 from app.routers.checkout import router as checkout_router
 from app.routers.webhook import router as webhook_router
 from app.routers.backups import router as backups_router
@@ -22,6 +23,7 @@ app.add_middleware(
 )
 
 app.include_router(provision_router)
+app.include_router(signup_router)
 app.include_router(checkout_router)
 app.include_router(webhook_router)
 # backups_router and invoices_router registered BEFORE instances_router: their
