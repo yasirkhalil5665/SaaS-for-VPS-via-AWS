@@ -7,6 +7,7 @@ from app.services.provisioner import provision_customer, is_slug_taken
 from app.services.deprovisioner import deprovision_customer
 from app.services.status_store import set_status, get_status, delete_status
 from app.services.port_allocator import get_next_port
+from app.services.main_site_sync import email_has_account
 
 router = APIRouter()
 
@@ -104,6 +105,21 @@ def provision(req: ProvisionRequest, background_tasks: BackgroundTasks):
         raise HTTPException(
             status_code=409,
             detail="This name is already taken. Please choose a different company name.",
+        )
+
+    signup_email = (req.company_info.email if req.company_info else None) or None
+    if signup_email and email_has_account(signup_email):
+        # The public /signup form is one-email-one-account only - repeat
+        # purchases by an existing customer go through the backend/admin
+        # flow instead, not this self-serve form. A structured "code" lets
+        # the frontend distinguish this from a generic error and offer a
+        # "log in instead" link rather than just showing red text.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "email_exists",
+                "message": "An account with this email already exists. Please log in instead.",
+            },
         )
 
     # Port is always allocated server-side now — client can no longer pick/spoof it
