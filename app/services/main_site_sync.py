@@ -303,23 +303,23 @@ def create_pending_customer(
                 }],
             )
 
-        # Auto-login token: carries the browser straight from "account just
-        # created" to /my with no login form - see the /auth/auto-login
-        # controller in saas_dashboard for the other half of this.
-        auto_login_token = None
+        # Verification session token: identifies this pending signup to the
+        # public /auth/verify page - it does NOT log anyone in by itself.
+        # Login only happens there, after the OTP below is confirmed
+        # correct. See saas.instance.generate_auto_login_token/
+        # consume_verification_token for the enforcement.
+        verify_token = None
         try:
-            auto_login_token = models.execute_kw(
+            verify_token = models.execute_kw(
                 MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
                 "saas.instance", "generate_auto_login_token",
                 [[instance_id]],
             )
         except Exception as e:
-            _logger.warning("Could not generate auto-login token for %s: %s", customer_slug, e)
+            _logger.warning("Could not generate verification token for %s: %s", customer_slug, e)
 
-        # Email verification (OTP) - generated and sent now, but does NOT
-        # block the auto-login above; verification is nagged for inside
-        # /my/instance (see the banner in portal_templates.xml), never a
-        # gate on first access.
+        # Email verification (OTP) - this IS the gate. The person cannot
+        # reach /my until they enter this code correctly on /auth/verify.
         try:
             otp_code = models.execute_kw(
                 MAIN_SITE_DB, uid, MAIN_SITE_ADMIN_PASSWORD,
@@ -341,8 +341,7 @@ def create_pending_customer(
             "partner_id": person_id,
             "user_id": user_id,
             "instance_id": instance_id,
-            "auto_login_token": auto_login_token,
-            "auto_login_url": f"{MAIN_SITE_PUBLIC_URL}/auth/auto-login?token={auto_login_token}" if auto_login_token else None,
+            "verify_url": f"{MAIN_SITE_PUBLIC_URL}/auth/verify?token={verify_token}" if verify_token else None,
         }
 
     except Exception as e:
