@@ -166,13 +166,16 @@ def reset_admin_credentials(
     with those known golden credentials, then changes the admin user's login
     and password to the new customer's actual chosen ones.
 
-    Split into two separate write() calls (password, then login) rather than
-    one combined {"login": ..., "password": ...} dict - and, critically,
-    re-authenticates with the NEW credentials afterward before reporting
-    success. A write() call not raising an exception was previously treated
-    as proof it worked; it isn't - it only proves Odoo didn't error, not that
-    the password Odoo ends up storing is actually the one that was sent.
-    Re-authenticating closes that exact gap.
+    Password is changed via change_password (Odoo's sanctioned self-service
+    method), not a raw write() - Odoo blocks writing your own password field
+    directly with AccessDenied even for an admin. Login is changed via a
+    separate write() call afterward, authenticated with the NEW password
+    since the old one stops working the moment change_password succeeds.
+
+    Also re-authenticates with the NEW credentials afterward before
+    reporting success - neither call not raising an exception was
+    previously treated as proof it worked; it isn't, on its own. Re-
+    authenticating closes that gap for real.
     """
     common_url = f"http://{host}:{port}/xmlrpc/2/common"
     object_url = f"http://{host}:{port}/xmlrpc/2/object"
@@ -212,22 +215,33 @@ def reset_admin_credentials(
         return {"success": False, "error": f"Could not find user with login {old_login}"}
 
     try:
-        # Password first, while old_login/old_password are still valid for
-        # authenticating this same call.
+        # A plain write({"password": ...}) on your OWN record is blocked by
+        # Odoo with AccessDenied (confirmed: XML-RPC Fault 3) as a security
+        # measure, even for an admin, even via XML-RPC - there's no way
+        # around that restriction, only the sanctioned path around it.
+        # change_password is that sanctioned method: it's the exact same
+        # call Odoo's own Preferences > Change Password screen makes, and
+        # it's designed specifically for a user changing their own password.
         models.execute_kw(
             db_name, uid, old_password,
-            "res.users", "write",
-            [user_ids, {"password": new_password}],
+            "res.users", "change_password",
+            [user_ids, old_password, new_password],
         )
-        # Login second, as its own call - once this lands, old_login/
-        # old_password stop being usable to authenticate at all.
+    except xmlrpc.client.Fault as e:
+        return {"success": False, "error": f"Password change failed: {e}"}
+
+    try:
+        # Login second, as its own call - and authenticated with
+        # NEW_password now, not old_password. The password already changed
+        # in the call above, so old_password no longer authenticates this
+        # uid; using it here would itself raise AccessDenied on this call.
         models.execute_kw(
-            db_name, uid, old_password,
+            db_name, uid, new_password,
             "res.users", "write",
             [user_ids, {"login": new_login}],
         )
     except Exception as e:
-        return {"success": False, "error": f"Credential write failed: {e}"}
+        return {"success": False, "error": f"Login change failed: {e}"}
 
     # The actual proof: can the NEW login/password log in? Neither write()
     # succeeding nor raising no exception is trustworthy on its own - this

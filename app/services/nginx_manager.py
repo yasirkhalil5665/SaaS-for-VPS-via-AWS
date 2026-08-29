@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
@@ -8,7 +9,11 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
 
-BASE_DOMAIN = "localhost"  # change to your real domain in production, e.g. "erisp.com"
+# Reads from .env like everything else environment-specific in this
+# project - going to a real domain is a .env change (BASE_DOMAIN=yourdomain.com),
+# not a code edit. Keep saas_dashboard's matching "saas_dashboard.base_domain"
+# system parameter in sync with this value (see saas_instance.py).
+BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "localhost")
 
 
 def _validate_config() -> tuple[bool, str]:
