@@ -222,11 +222,30 @@ def reset_admin_credentials(
         # change_password is that sanctioned method: it's the exact same
         # call Odoo's own Preferences > Change Password screen makes, and
         # it's designed specifically for a user changing their own password.
-        models.execute_kw(
-            db_name, uid, old_password,
-            "res.users", "change_password",
-            [user_ids, old_password, new_password],
-        )
+        #
+        # Signature varies by Odoo version: through Odoo ~17 it was
+        # change_password(old_passwd, new_passwd); Odoo 19 (confirmed via
+        # the "takes 3 positional arguments but 4 were given" TypeError
+        # this used to raise here) dropped old_passwd entirely - reasonable,
+        # since authenticating via XML-RPC with old_password already proves
+        # you know it, making passing it again redundant. Try the new
+        # (current) signature first, fall back to the old one so this
+        # doesn't silently break again on whichever Odoo version is
+        # actually running.
+        try:
+            models.execute_kw(
+                db_name, uid, old_password,
+                "res.users", "change_password",
+                [user_ids, new_password],
+            )
+        except xmlrpc.client.Fault as e:
+            if "positional argument" not in str(e):
+                raise
+            models.execute_kw(
+                db_name, uid, old_password,
+                "res.users", "change_password",
+                [user_ids, old_password, new_password],
+            )
     except xmlrpc.client.Fault as e:
         return {"success": False, "error": f"Password change failed: {e}"}
 
@@ -254,4 +273,3 @@ def reset_admin_credentials(
         }
 
     return {"success": True, "new_login": new_login}
-
