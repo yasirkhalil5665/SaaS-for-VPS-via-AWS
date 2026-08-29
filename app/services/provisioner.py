@@ -105,24 +105,16 @@ def provision_customer(
     timer.lap("main_site_sync_create")
 
     # Welcome email fires here, right after the account exists - NOT after
-    # step 8 (old location, after the full Docker pipeline: compose up,
-    # wait_for_odoo, database creation, module installs, nginx). That made
-    # the email wait 15-30+ seconds for something it doesn't actually need,
-    # since the domain is just f"{customer_slug}.{BASE_DOMAIN}" - the exact
-    # same value nginx will end up configuring, computed independently here
-    # rather than waiting for nginx_result. This matches the "fast login"
-    # principle already used everywhere else: the account/login is usable
-    # immediately, the actual instance finishes provisioning in the
-    # background - the email should reflect that, not silently contradict it.
-    if customer_email:
-        send_welcome_email_via_odoo(
-            customer_slug=customer_slug,
-            customer_email=customer_email,
-            domain=f"{customer_slug}.{BASE_DOMAIN}",
-            admin_login=admin_login,
-            admin_password=admin_password,
-            package=package,
-        )
+    # The "your instance is ready" email used to fire here (right after
+    # account creation, before any Docker/credential work even starts) on
+    # the reasoning that the domain is deterministic and doesn't need to
+    # wait for anything. That reasoning held right up until it didn't: the
+    # admin credentials genuinely can fail to apply (see reset_admin_credentials
+    # below, which now actually verifies this), and an email promising
+    # working login details that turn out not to work is worse than an
+    # email that arrives a bit later but is actually true. Moved to fire
+    # only after mark_instance_ready() - see below - once success is real,
+    # not assumed.
     timer.lap("send_email")
 
     if on_account_ready:
@@ -222,28 +214,13 @@ def provision_customer(
                     admin_login, admin_password,
                 )
 
-                # This used to be stored and never actually checked - if it
-                # failed, the instance silently kept the golden template's
-                # original admin/password instead of the customer's chosen
-                # one, while everything downstream (welcome email, "ready"
-                # status) reported success anyway. That's the exact shape
-                # of "account looks ready but the password doesn't work."
-                # One retry covers a brief timing hiccup right after
-                # restore; if it's still failing after that, it's a real
-                # problem (most likely GOLDEN_ADMIN_LOGIN/GOLDEN_ADMIN_PASSWORD
-                # in golden_template.py no longer matching what's actually
-                # baked into templates/golden.dump) and provisioning should
-                # say so loudly rather than hand someone credentials that
-                # don't work.
-                if not reset_result.get("success"):
-                    time.sleep(2)
-                    reset_result = reset_admin_credentials(
-                        "localhost", host_port,
-                        customer_slug,
-                        GOLDEN_ADMIN_LOGIN, GOLDEN_ADMIN_PASSWORD,
-                        admin_login, admin_password,
-                    )
-
+                # reset_admin_credentials already retries internally for up
+                # to 30s (the freshly-restored database needs a moment to
+                # actually become authenticatable) and verifies the new
+                # credentials actually work before reporting success - so a
+                # failure here is a real one, not a transient timing blip,
+                # and should say so loudly rather than hand someone
+                # credentials that don't work.
                 if not reset_result.get("success"):
                     error_message = reset_result.get("error") or "Could not set the customer's admin credentials."
                     mark_instance_failed(customer_slug, error_message)
@@ -327,9 +304,21 @@ def provision_customer(
         timer.lap("save_metadata")
 
         # 10. Flip the account created in step 0 over to "ready" now that
-        # Docker provisioning actually succeeded.
+        # Docker provisioning actually succeeded - and only NOW send the
+        # "your instance is ready" email. This is the one point in the
+        # whole flow where success is actually confirmed (container up,
+        # database restored, credentials verified to authenticate) rather
+        # than assumed - see the note above where this email used to fire.
         if customer_email:
             mark_instance_ready(customer_slug)
+            send_welcome_email_via_odoo(
+                customer_slug=customer_slug,
+                customer_email=customer_email,
+                domain=f"{customer_slug}.{BASE_DOMAIN}",
+                admin_login=admin_login,
+                admin_password=admin_password,
+                package=package,
+            )
         timer.lap("mark_ready")
 
         return {

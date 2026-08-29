@@ -178,7 +178,25 @@ def reset_admin_credentials(
     object_url = f"http://{host}:{port}/xmlrpc/2/object"
 
     common = xmlrpc.client.ServerProxy(common_url, allow_none=True)
-    uid = common.authenticate(db_name, old_login, old_password, {})
+
+    # wait_for_odoo (called earlier in provisioner.py) only proves the Odoo
+    # process itself is up - it runs BEFORE this database even exists yet
+    # (golden restore happens after). Odoo still needs to build/register a
+    # Registry for this brand new database on first access, which can take
+    # a few seconds right after a pg_restore. A single retry with a fixed
+    # 2s pause (the previous approach) wasn't a generous enough window -
+    # this polls for up to 30s specifically for THIS database to become
+    # authenticatable before giving up for real.
+    uid = None
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        try:
+            uid = common.authenticate(db_name, old_login, old_password, {})
+        except Exception:
+            uid = None
+        if uid:
+            break
+        time.sleep(1.5)
 
     if not uid:
         return {"success": False, "error": "Could not authenticate with golden template credentials"}
