@@ -245,17 +245,13 @@ def provision_customer(
                     )
 
                 if not reset_result.get("success"):
+                    error_message = reset_result.get("error") or "Could not set the customer's admin credentials."
+                    mark_instance_failed(customer_slug, error_message)
                     return {
                         "success": False,
                         "customer_slug": customer_slug,
                         "step": "credential_reset",
-                        "error": reset_result.get("error") or "Could not set the customer's admin credentials.",
-                        "hint": (
-                            "GOLDEN_ADMIN_LOGIN/GOLDEN_ADMIN_PASSWORD in golden_template.py "
-                            "likely don't match the real admin login/password baked into "
-                            "templates/golden.dump - verify those match, or the dump needs "
-                            "to be regenerated with credentials matching the constants."
-                        ),
+                        "error": error_message,
                         "timing": timer.marks,
                     }
 
