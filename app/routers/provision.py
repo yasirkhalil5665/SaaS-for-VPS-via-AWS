@@ -74,9 +74,24 @@ def _run_provisioning(req: ProvisionRequest, host_port: int):
             req.referral_token,
             on_account_ready=_on_account_ready,
         )
-        result["state"] = "done"
-        result["portal_ready"] = True
-        set_status(req.customer_slug, result)
+        if result.get("success"):
+            result["state"] = "done"
+            result["portal_ready"] = True
+            set_status(req.customer_slug, result)
+        else:
+            # provision_customer can now fail AFTER _on_account_ready already
+            # fired (e.g. credential_reset) - the main-site account/login is
+            # still fine at this point, only the customer's own provisioned
+            # instance is broken. Keep whatever portal_ready state already
+            # exists rather than clearing it, same reasoning as the except
+            # branch below.
+            existing = get_status(req.customer_slug) or {}
+            set_status(req.customer_slug, {
+                **existing,
+                **result,
+                "state": "failed",
+                "error": result.get("error") or "Provisioning failed.",
+            })
     except Exception as e:
         # portal_ready may already be True from _on_account_ready - a failure
         # here means Docker provisioning failed AFTER the account was

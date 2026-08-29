@@ -72,8 +72,16 @@ def provision_customer(
     timer = _Timer()
     specs = PACKAGES[package]
     customer_dir = CUSTOMERS_DIR / customer_slug
-    admin_login = f"admin@{customer_slug}.local"
     customer_email = (company_info or {}).get("email")
+
+    # The person's real email, not a synthetic admin@<slug>.local - each
+    # customer gets their own fully isolated database (dedicated container),
+    # so there's no cross-customer login collision risk in using their real
+    # email here, same as it's already used as their login on the main
+    # site. Falls back to the synthetic form only for the rare case this
+    # runs with no email at all (e.g. an admin-triggered provision with no
+    # company_info).
+    admin_login = customer_email or f"admin@{customer_slug}.local"
 
     # 0. Create the account FIRST - Company, Person, portal login, and a
     # saas.instance record (state='provisioning' by default) - before any
@@ -213,6 +221,44 @@ def provision_customer(
                     GOLDEN_ADMIN_LOGIN, GOLDEN_ADMIN_PASSWORD,
                     admin_login, admin_password,
                 )
+
+                # This used to be stored and never actually checked - if it
+                # failed, the instance silently kept the golden template's
+                # original admin/password instead of the customer's chosen
+                # one, while everything downstream (welcome email, "ready"
+                # status) reported success anyway. That's the exact shape
+                # of "account looks ready but the password doesn't work."
+                # One retry covers a brief timing hiccup right after
+                # restore; if it's still failing after that, it's a real
+                # problem (most likely GOLDEN_ADMIN_LOGIN/GOLDEN_ADMIN_PASSWORD
+                # in golden_template.py no longer matching what's actually
+                # baked into templates/golden.dump) and provisioning should
+                # say so loudly rather than hand someone credentials that
+                # don't work.
+                if not reset_result.get("success"):
+                    time.sleep(2)
+                    reset_result = reset_admin_credentials(
+                        "localhost", host_port,
+                        customer_slug,
+                        GOLDEN_ADMIN_LOGIN, GOLDEN_ADMIN_PASSWORD,
+                        admin_login, admin_password,
+                    )
+
+                if not reset_result.get("success"):
+                    return {
+                        "success": False,
+                        "customer_slug": customer_slug,
+                        "step": "credential_reset",
+                        "error": reset_result.get("error") or "Could not set the customer's admin credentials.",
+                        "hint": (
+                            "GOLDEN_ADMIN_LOGIN/GOLDEN_ADMIN_PASSWORD in golden_template.py "
+                            "likely don't match the real admin login/password baked into "
+                            "templates/golden.dump - verify those match, or the dump needs "
+                            "to be regenerated with credentials matching the constants."
+                        ),
+                        "timing": timer.marks,
+                    }
+
                 db_result["credential_reset"] = reset_result
             timer.lap("credential_reset")
 

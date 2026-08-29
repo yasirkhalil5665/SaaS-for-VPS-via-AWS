@@ -1,7 +1,7 @@
 services:
   odoo:
     image: odoo:19.0
-    container_name: odoo-yasirkhalil2026
+    container_name: odoo-yasirkhalil5665-2866
     user: root
     tty: true
     depends_on:
@@ -13,7 +13,7 @@ services:
       - PASSWORD=odoo
     restart: always
     ports:
-      - "8209:8069"
+      - "8205:8069"
     deploy:
       resources:
         limits:
@@ -23,12 +23,12 @@ services:
           cpus: "1"
           memory: 2g
     networks:
-      net-yasirkhalil2026:
+      net-yasirkhalil5665-2866:
         aliases:
           - odoo
       proxy-net:
         aliases:
-          - yasirkhalil2026
+          - yasirkhalil5665-2866
     volumes:
       - data:/var/lib/odoo
       - config:/etc/odoo
@@ -41,7 +41,7 @@ services:
 
   db:
     image: postgres:16
-    container_name: postgres-yasirkhalil2026
+    container_name: postgres-yasirkhalil5665-2866
     environment:
       - POSTGRES_USER=odoo
       - POSTGRES_PASSWORD=odoo
@@ -61,7 +61,7 @@ services:
     volumes:
       - ./postgresql:/var/lib/postgresql/data
     networks:
-      - net-yasirkhalil2026
+      - net-yasirkhalil5665-2866
     logging:
       options:
         max-size: "10m"
@@ -73,7 +73,7 @@ volumes:
   log:
 
 networks:
-  net-yasirkhalil2026:
+  net-yasirkhalil5665-2866:
     driver: bridge
   proxy-net:
     external: true

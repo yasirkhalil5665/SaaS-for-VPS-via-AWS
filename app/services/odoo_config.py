@@ -164,7 +164,16 @@ def reset_admin_credentials(
     """Used after cloning from the golden template: the cloned database still
     has the golden template's original admin login/password. This authenticates
     with those known golden credentials, then changes the admin user's login
-    and password to the new customer's actual chosen ones."""
+    and password to the new customer's actual chosen ones.
+
+    Split into two separate write() calls (password, then login) rather than
+    one combined {"login": ..., "password": ...} dict - and, critically,
+    re-authenticates with the NEW credentials afterward before reporting
+    success. A write() call not raising an exception was previously treated
+    as proof it worked; it isn't - it only proves Odoo didn't error, not that
+    the password Odoo ends up storing is actually the one that was sent.
+    Re-authenticating closes that exact gap.
+    """
     common_url = f"http://{host}:{port}/xmlrpc/2/common"
     object_url = f"http://{host}:{port}/xmlrpc/2/object"
 
@@ -184,10 +193,33 @@ def reset_admin_credentials(
     if not user_ids:
         return {"success": False, "error": f"Could not find user with login {old_login}"}
 
-    models.execute_kw(
-        db_name, uid, old_password,
-        "res.users", "write",
-        [user_ids, {"login": new_login, "password": new_password}],
-    )
+    try:
+        # Password first, while old_login/old_password are still valid for
+        # authenticating this same call.
+        models.execute_kw(
+            db_name, uid, old_password,
+            "res.users", "write",
+            [user_ids, {"password": new_password}],
+        )
+        # Login second, as its own call - once this lands, old_login/
+        # old_password stop being usable to authenticate at all.
+        models.execute_kw(
+            db_name, uid, old_password,
+            "res.users", "write",
+            [user_ids, {"login": new_login}],
+        )
+    except Exception as e:
+        return {"success": False, "error": f"Credential write failed: {e}"}
+
+    # The actual proof: can the NEW login/password log in? Neither write()
+    # succeeding nor raising no exception is trustworthy on its own - this
+    # is the only check that confirms the customer's real password works.
+    verify_uid = common.authenticate(db_name, new_login, new_password, {})
+    if not verify_uid:
+        return {
+            "success": False,
+            "error": "Credentials were written but did not verify - new login/password could not authenticate after the change.",
+        }
 
     return {"success": True, "new_login": new_login}
+
