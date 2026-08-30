@@ -1,35 +1,34 @@
 services:
   odoo:
     image: odoo:19.0
-    container_name: odoo-{{ customer_slug }}
+    container_name: odoo-yasirkhalil5665-2606
     user: root
     tty: true
     depends_on:
       db:
         condition: service_healthy
-    command: ["--", "--db-filter=^{{ customer_slug }}$$"]
     environment:
       - HOST=db
       - USER=odoo
       - PASSWORD=odoo
     restart: always
     ports:
-      - "{{ host_port }}:8069"
+      - "8229:8069"
     deploy:
       resources:
         limits:
-          cpus: "{{ cpu }}"
-          memory: {{ memory }}
+          cpus: "2"
+          memory: 4g
         reservations:
-          cpus: "{{ cpu_reserve }}"
-          memory: {{ memory_reserve }}
+          cpus: "1"
+          memory: 2g
     networks:
-      net-{{ customer_slug }}:
+      net-yasirkhalil5665-2606:
         aliases:
           - odoo
       proxy-net:
         aliases:
-          - {{ customer_slug }}
+          - yasirkhalil5665-2606
     volumes:
       - data:/var/lib/odoo
       - config:/etc/odoo
@@ -42,7 +41,7 @@ services:
 
   db:
     image: postgres:16
-    container_name: postgres-{{ customer_slug }}
+    container_name: postgres-yasirkhalil5665-2606
     environment:
       - POSTGRES_USER=odoo
       - POSTGRES_PASSWORD=odoo
@@ -51,8 +50,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "{{ db_cpu }}"
-          memory: {{ db_memory }}
+          cpus: "1"
+          memory: 1g
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U odoo"]
       interval: 2s
@@ -62,7 +61,7 @@ services:
     volumes:
       - ./postgresql:/var/lib/postgresql/data
     networks:
-      - net-{{ customer_slug }}
+      - net-yasirkhalil5665-2606
     logging:
       options:
         max-size: "10m"
@@ -74,7 +73,7 @@ volumes:
   log:
 
 networks:
-  net-{{ customer_slug }}:
+  net-yasirkhalil5665-2606:
     driver: bridge
   proxy-net:
     external: true
