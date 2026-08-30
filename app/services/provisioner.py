@@ -322,6 +322,7 @@ def provision_customer(
         timer.lap("mark_ready")
 
         return {
+            "success": True,
             "customer_slug": customer_slug,
             "package": package,
             "host_port": host_port,
