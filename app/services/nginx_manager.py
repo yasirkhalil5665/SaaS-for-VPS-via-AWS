@@ -13,7 +13,7 @@ env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
 # project - going to a real domain is a .env change (BASE_DOMAIN=yourdomain.com),
 # not a code edit. Keep saas_dashboard's matching "saas_dashboard.base_domain"
 # system parameter in sync with this value (see saas_instance.py).
-BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "localhost")
+BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "coolbites.site")
 
 
 def _validate_config() -> tuple[bool, str]:

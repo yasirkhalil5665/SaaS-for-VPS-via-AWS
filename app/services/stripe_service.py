@@ -10,8 +10,8 @@ PACKAGE_PRICE_IDS = {
     "enterprise": os.environ.get("STRIPE_PRICE_ENTERPRISE", "price_REPLACE_ENTERPRISE"),
 }
 
-SUCCESS_URL = os.environ.get("CHECKOUT_SUCCESS_URL", "http://localhost:8000/checkout/success")
-CANCEL_URL = os.environ.get("CHECKOUT_CANCEL_URL", "http://localhost:8000/checkout/cancel")
+SUCCESS_URL = os.environ.get("CHECKOUT_SUCCESS_URL", "https://api.coolbites.site/checkout/success")
+CANCEL_URL = os.environ.get("CHECKOUT_CANCEL_URL", "https://api.coolbites.site/checkout/cancel")
 
 
 def create_checkout_session(customer_slug: str, package: str, host_port: int, company_info: dict | None) -> str:

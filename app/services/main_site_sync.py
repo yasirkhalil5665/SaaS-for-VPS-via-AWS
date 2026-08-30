@@ -13,15 +13,18 @@ MAIN_SITE_DB = os.environ.get("MAIN_SITE_DB", "Test")
 MAIN_SITE_ADMIN_LOGIN = os.environ.get("MAIN_SITE_ADMIN_LOGIN", "odoo")
 MAIN_SITE_ADMIN_PASSWORD = os.environ.get("MAIN_SITE_ADMIN_PASSWORD", "")
 
-# The public URL a person's BROWSER should hit (auto-login redirect target) -
-# deliberately separate from MAIN_SITE_HOST/PORT above, which is the
-# internal host:port this process uses for XML-RPC and is very often NOT
-# reachable/correct from outside (docker-internal hostnames, non-standard
-# ports, etc). Defaults to the XML-RPC host for convenience in local/single-
-# host setups, but should be set explicitly to the real public domain
-# (e.g. https://erisp.co) anywhere that differs.
+# The public URL a person's BROWSER should hit (auto-login redirect target,
+# verification links) - deliberately separate from MAIN_SITE_HOST/PORT
+# above, which is the internal host:port this process uses for XML-RPC and
+# is very often NOT reachable/correct from outside (docker-internal
+# hostnames, non-standard ports, etc). Hardcoded to the real domain as the
+# fallback (not derived from MAIN_SITE_HOST) because that derivation is
+# exactly what silently produced http://localhost:8069 verification links
+# in production before - MAIN_SITE_PUBLIC_URL was unset, so it fell back to
+# building a URL from MAIN_SITE_HOST, which is correctly "localhost" for
+# XML-RPC but was never meant to be customer-facing.
 MAIN_SITE_PUBLIC_URL = os.environ.get(
-    "MAIN_SITE_PUBLIC_URL", f"http://{MAIN_SITE_HOST}:{MAIN_SITE_PORT}"
+    "MAIN_SITE_PUBLIC_URL", "https://coolbites.site"
 ).rstrip("/")
 
 # Shared sender for transactional emails (welcome, invoice) sent via
