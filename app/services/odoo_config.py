@@ -220,32 +220,22 @@ def reset_admin_credentials(
         # measure, even for an admin, even via XML-RPC - there's no way
         # around that restriction, only the sanctioned path around it.
         # change_password is that sanctioned method: it's the exact same
-        # call Odoo's own Preferences > Change Password screen makes, and
-        # it's designed specifically for a user changing their own password.
+        # call Odoo's own Preferences > Change Password screen makes.
         #
-        # Signature varies by Odoo version: through Odoo ~17 it was
-        # change_password(old_passwd, new_passwd); Odoo 19 (confirmed via
-        # the "takes 3 positional arguments but 4 were given" TypeError
-        # this used to raise here) dropped old_passwd entirely - reasonable,
-        # since authenticating via XML-RPC with old_password already proves
-        # you know it, making passing it again redundant. Try the new
-        # (current) signature first, fall back to the old one so this
-        # doesn't silently break again on whichever Odoo version is
-        # actually running.
-        try:
-            models.execute_kw(
-                db_name, uid, old_password,
-                "res.users", "change_password",
-                [user_ids, new_password],
-            )
-        except xmlrpc.client.Fault as e:
-            if "positional argument" not in str(e):
-                raise
-            models.execute_kw(
-                db_name, uid, old_password,
-                "res.users", "change_password",
-                [user_ids, old_password, new_password],
-            )
+        # Confirmed from Odoo 19's actual source (base/models/res_users.py):
+        # change_password is decorated @api.model. Per service/model.py's
+        # dispatch, @api.model methods are called WITHOUT stripping args[0]
+        # as record ids first - the whole args list is passed straight
+        # through as positional arguments. change_password always acts on
+        # self.env.user (whoever authenticated in THIS XML-RPC call), so it
+        # only takes (old_passwd, new_passwd) - passing ids at all was the
+        # bug: they silently landed in the old_passwd parameter instead,
+        # which is what actually caused both prior failures here.
+        models.execute_kw(
+            db_name, uid, old_password,
+            "res.users", "change_password",
+            [old_password, new_password],
+        )
     except xmlrpc.client.Fault as e:
         return {"success": False, "error": f"Password change failed: {e}"}
 
